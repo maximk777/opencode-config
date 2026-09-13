@@ -1,5 +1,6 @@
+import { readFile } from "node:fs/promises";
 import { tool } from "@opencode-ai/plugin";
-import { isScopedAgent, buildCompactionContext, summaryPayload, safeFacts } from "../lib/session-reset-core.mjs";
+import { isScopedAgent, buildCompactionContext, summaryPayload, safeFacts, modelFromTier } from "../lib/session-reset-core.mjs";
 
 const TOKEN_BUDGET = 1500;
 const OV = "http://127.0.0.1:1933";
@@ -85,12 +86,11 @@ export const SessionReset = async ({ client, $ }) => {
         args: {},
         async execute(_args, ctx) {
           if (!isScopedAgent(ctx.agent)) return "phase_reset is only for orchestrator and architect sessions";
-          const cfg = await client.config.get().catch(() => null);
-          const [providerID, ...rest] = String(cfg?.data?.model ?? "zai-coding-plan/glm-5.3").split("/");
+          const tier = new URL("../tiers/fast", import.meta.url);
+          const model = modelFromTier(await readFile(tier, "utf8").catch(() => ""));
+          if (!model) return `phase_reset: ${tier.pathname} does not name a provider/model`;
           // Awaiting summarize here deadlocks: it waits for the session to go idle, and the session is busy running this tool.
-          client.session
-            .summarize({ path: { id: ctx.sessionID }, body: { providerID, modelID: rest.join("/") } })
-            .catch(() => {});
+          client.session.summarize({ path: { id: ctx.sessionID }, body: model }).catch(() => {});
           return "compaction scheduled: finish this turn now; the next turn starts from the compacted summary and the change files";
         },
       }),

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isScopedAgent, renderState, buildCompactionContext, summaryPayload, safeFacts } from "../lib/session-reset-core.mjs";
+import { isScopedAgent, renderState, buildCompactionContext, summaryPayload, safeFacts, modelFromTier } from "../lib/session-reset-core.mjs";
 
 const state = { slug: "add-ping", tasks_open: ["1.2", "1.3"], awaiting_review: ["1.2"], current_wave: 2 };
 
@@ -44,4 +44,22 @@ test("missing state keeps facts only", () => {
   const ctx = buildCompactionContext({ agent: "architect", state: null, facts: ["fact one"], tokenBudget: 500 });
   assert.equal(ctx.length, 1);
   assert.match(ctx[0], /fact one/);
+});
+
+test("tier file becomes provider and model ids", () => {
+  assert.deepEqual(modelFromTier("zai-coding-plan/glm-5.3-flash\n"), { providerID: "zai-coding-plan", modelID: "glm-5.3-flash" });
+  assert.deepEqual(modelFromTier("openrouter/vendor/model"), { providerID: "openrouter", modelID: "vendor/model" });
+  assert.equal(modelFromTier(""), null);
+  assert.equal(modelFromTier("no-slash"), null);
+});
+
+test("phase_reset summarizes with the fast tier model", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { SessionReset } = await import("../plugins/session-reset.mjs");
+  const tier = modelFromTier(readFileSync(new URL("../tiers/fast", import.meta.url), "utf8"));
+  let body;
+  const client = { session: { summarize: async (req) => { body = req.body; } } };
+  const hooks = await SessionReset({ client, $: null });
+  await hooks.tool.phase_reset.execute({}, { agent: "orchestrator", sessionID: "s1" });
+  assert.deepEqual(body, tier);
 });
