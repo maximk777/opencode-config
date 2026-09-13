@@ -23,6 +23,15 @@ async function findFacts(query) {
 }
 
 export const SessionReset = async ({ client, $ }) => {
+  // A continued session in a new process has an empty map, so fall back to the agent recorded on its messages.
+  const agentFor = async (sessionID) => {
+    if (agentBySession.has(sessionID)) return agentBySession.get(sessionID);
+    const msgs = await client.session.messages({ path: { id: sessionID } }).catch(() => null);
+    const agent = [...(msgs?.data ?? [])].reverse().find((m) => m.info?.agent)?.info?.agent;
+    if (agent) agentBySession.set(sessionID, agent);
+    return agent;
+  };
+
   const changeRef = async (sessionID) => {
     const r = await client.session.get({ path: { id: sessionID } }).catch(() => null);
     return r?.data?.title?.match(/\[change:([^\]]+)\]/)?.[1] ?? null;
@@ -32,8 +41,9 @@ export const SessionReset = async ({ client, $ }) => {
     if (!ref) return null;
     const [project, slug] = ref.split("/");
     const home = process.env.HOME;
+    const changeState = new URL("../bin/change-state", import.meta.url).pathname;
     try {
-      return JSON.parse(await $`${home}/.config/opencode/bin/change-state ${home}/specs/${project} ${slug}`.quiet().text());
+      return JSON.parse(await $`${changeState} ${home}/specs/${project} ${slug}`.quiet().text());
     } catch {
       return null;
     }
@@ -45,7 +55,7 @@ export const SessionReset = async ({ client, $ }) => {
     },
 
     "experimental.session.compacting": async (input, output) => {
-      const agent = agentBySession.get(input.sessionID);
+      const agent = await agentFor(input.sessionID);
       if (!isScopedAgent(agent)) return;
       const state = await readState(await changeRef(input.sessionID));
       const { facts } = await safeFacts(() => findFacts(state?.slug ?? ""));
@@ -55,7 +65,7 @@ export const SessionReset = async ({ client, $ }) => {
     event: async ({ event }) => {
       if (event.type !== "session.compacted") return;
       const sessionID = event.properties?.sessionID;
-      const agent = agentBySession.get(sessionID);
+      const agent = await agentFor(sessionID);
       if (!isScopedAgent(agent)) return;
       const msgs = await client.session.messages({ path: { id: sessionID } }).catch(() => null);
       const last = [...(msgs?.data ?? [])].reverse().find((m) => m.info?.summary);
@@ -77,8 +87,11 @@ export const SessionReset = async ({ client, $ }) => {
           if (!isScopedAgent(ctx.agent)) return "phase_reset is only for orchestrator and architect sessions";
           const cfg = await client.config.get().catch(() => null);
           const [providerID, ...rest] = String(cfg?.data?.model ?? "zai-coding-plan/glm-5.3").split("/");
-          await client.session.summarize({ path: { id: ctx.sessionID }, body: { providerID, modelID: rest.join("/") } });
-          return "session compacted";
+          // Awaiting summarize here deadlocks: it waits for the session to go idle, and the session is busy running this tool.
+          client.session
+            .summarize({ path: { id: ctx.sessionID }, body: { providerID, modelID: rest.join("/") } })
+            .catch(() => {});
+          return "compaction scheduled: finish this turn now; the next turn starts from the compacted summary and the change files";
         },
       }),
     },

@@ -30,6 +30,11 @@ Pass the reviewer the brief path, the report path and the task's file list. Do n
 On NOT COMPLIANT or quality issues, send the notes back to the same executor with its task_id.
 After three rejected fix rounds with the same executor, dispatch executor-strong; if that fails, ask the user.
 
+## Session reset
+
+Call phase_reset after the spec is approved, after the plan is approved, and after every wave is accepted.
+The compaction keeps the change state from files; after it, run change-state if anything is unclear and continue.
+
 ## Acceptance
 
 On acceptance run git add -- <task files> and check the task in tasks.md.

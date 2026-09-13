@@ -3,3 +3,4 @@ node_modules/
 *.env
 __pycache__/
 /smoke/out/
+/migration/export/

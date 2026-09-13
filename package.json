@@ -2,5 +2,7 @@
   "name": "setup-opencode",
   "private": true,
   "type": "module",
-  "dependencies": { "@opencode-ai/plugin": "1.18.30" }
+  "dependencies": {
+    "@opencode-ai/plugin": "1.18.30"
+  }
 }
