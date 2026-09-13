@@ -8,7 +8,7 @@ Move only useful facts into OpenViking. The export is noisy: session notes, stal
 
 ## Input
 
-`~/setup-opencode/migration/export/triage.md`, produced by `bin/memory-export`, with columns `| # | Source | Title | Proposed | Reason |`. Rows with a detected secret already say `drop` and `contains secret`.
+`~/.config/opencode/migration/export/triage.md`, produced by `bin/memory-export`, with columns `| # | Source | Title | Proposed | Reason |`. Rows with a detected secret already say `drop` and `contains secret`.
 
 ## Rules
 
