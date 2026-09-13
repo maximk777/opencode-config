@@ -14,12 +14,16 @@ def build_command(project):
 def sync(project, run=subprocess.run):
     try:
         r = run(build_command(project), capture_output=True, text=True, timeout=600)
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        print("ov-sync: openviking unavailable, skipped")
+    except FileNotFoundError:
+        print("ov-sync: docker not installed, skipped")
         return 0
+    except subprocess.TimeoutExpired:
+        print("ov-sync: docker exec timed out", file=sys.stderr)
+        return 1
     if r.returncode != 0:
-        print("ov-sync: openviking unavailable, skipped")
-        return 0
+        sys.stderr.write(r.stderr)
+        print(f"ov-sync: docker exec failed with exit {r.returncode}", file=sys.stderr)
+        return r.returncode
     print(f"ov-sync: synced viking://resources/{project}/specs")
     return 0
 
