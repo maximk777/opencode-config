@@ -52,6 +52,8 @@ test("primary agents read freely", () => {
       "find . -name '*.go'",
       "IFS= read -r line",
       "go test ./...",
+      "ls -la ~/specs/p/openspec/changes/x/reports/ 2>/dev/null",
+      "git status --short 2>&1",
     ]);
   }
 });
@@ -81,6 +83,11 @@ test("primary agents cannot write the work repository through bash without askin
       "rg --pre rm x",
       "openspec init .",
       "tee out",
+      "cat a > f 2>/dev/null",
+      "ls > f 2>&1",
+      "ls 2>/dev/null > f",
+      "find . -delete 2>/dev/null",
+      "rm -rf x 2>/dev/null",
     ]);
   }
 });
