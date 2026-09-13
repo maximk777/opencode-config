@@ -1,0 +1,12 @@
+services:
+  openviking:
+    image: ghcr.io/volcengine/openviking:v0.4.19
+    container_name: openviking
+    ports:
+      - "127.0.0.1:1933:1933"
+    volumes:
+      - ~/.openviking:/app/.openviking
+      - ~/specs:/specs:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

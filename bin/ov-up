@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+import os
+import string
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+HOME_DIR = Path.home() / ".openviking"
+
+
+def read_env(path):
+    env = {}
+    for line in path.read_text().splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.split("=", 1)
+            env[k.strip()] = v.strip()
+    return env
+
+
+def render_config(template_text, env):
+    return string.Template(template_text).substitute(env)
+
+
+def main():
+    env_file = HOME_DIR / ".env"
+    if not env_file.exists():
+        sys.exit("ov-up: ~/.openviking/.env is missing")
+    conf = HOME_DIR / "ov.conf"
+    conf.write_text(render_config((REPO / "openviking" / "ov.conf.template").read_text(), read_env(env_file)))
+    os.chmod(conf, 0o600)
+    subprocess.run(["ollama", "pull", "bge-m3"], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["docker", "compose", "-f", str(REPO / "openviking" / "docker-compose.yml"), "up", "-d"], check=True)
+    print("ov-up: started")
+
+
+if __name__ == "__main__":
+    main()

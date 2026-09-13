@@ -1,0 +1,18 @@
+{
+  "server": { "root_api_key": "${OPENVIKING_ROOT_KEY}" },
+  "storage": { "workspace": "/app/.openviking/data" },
+  "embedding": {
+    "dense": {
+      "provider": "ollama",
+      "api_base": "http://host.docker.internal:11434",
+      "model": "bge-m3",
+      "dimension": 1024
+    }
+  },
+  "vlm": {
+    "provider": "openai",
+    "api_base": "https://api.deepseek.com",
+    "api_key": "${DEEPSEEK_API_KEY}",
+    "model": "deepseek-flash"
+  }
+}
