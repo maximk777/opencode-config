@@ -30,6 +30,14 @@ class ErrorBackground(unittest.TestCase):
         self.assertIn("Fix commits: 2", out)
         self.assertIn("| a.go | 2 | 2 |", out)
 
+    def test_fix_keywords_match_whole_words(self):
+        fixes = ["fix: x", "fix(api): x", "hotfix null pointer", "Bug in parser", "bugfix for login", "исправлен таймаут"]
+        others = ["feat: add debug logging", "chore: remove debugger", "refactor: prefix handling", "docs: fixture notes"]
+        for s in fixes:
+            self.assertTrue(E.FIX.search(s), s)
+        for s in others:
+            self.assertFalse(E.FIX.search(s), s)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,7 @@ import collections
 import re
 import subprocess
 
-FIX = re.compile(r"^fix(\(|:)|hotfix|bug|исправ", re.I)
+FIX = re.compile(r"^fix(\(|:)|\bhotfix\b|\bbug(s|fix(es)?)?\b|\bисправ", re.I)
 
 
 def parse(log):
