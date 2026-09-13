@@ -242,6 +242,41 @@
           "git push*": "deny"
         }
       }
+    },
+    "instrumentation": {
+      "mode": "primary",
+      "description": "Builds and audits project agent instrumentation: AGENTS.md, .agents rules, skills and agents",
+      "model": "{file:./tiers/smart}",
+      "prompt": "{file:./prompts/instrumentation.md}",
+      "permission": {
+        "edit": {
+          "*": "deny",
+          "AGENTS.md": "allow",
+          ".agents/*": "allow",
+          ".opencode/*": "allow"
+        },
+        "task": {
+          "*": "deny",
+          "explorer": "allow"
+        },
+        "bash": {
+          "*": "ask",
+          "git status*": "allow",
+          "git log*": "allow",
+          "git diff*": "allow",
+          "git worktree add*": "allow",
+          "git worktree remove*": "allow",
+          "go build*": "allow",
+          "go test*": "allow",
+          "npm test*": "allow",
+          "ln -s *": "allow",
+          "mkdir *": "allow",
+          "*/bin/agents-lint *": "allow",
+          "*/link-opencode.sh": "allow",
+          "git commit*": "deny",
+          "git push*": "deny"
+        }
+      }
     }
   }
 }
