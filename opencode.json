@@ -277,6 +277,37 @@
           "git push*": "deny"
         }
       }
+    },
+    "setup-improver": {
+      "mode": "primary",
+      "description": "Audits and improves the global OpenCode setup: config drift, upstream sources, flow metrics",
+      "model": "{file:./tiers/smart}",
+      "prompt": "{file:./prompts/setup-improver.md}",
+      "permission": {
+        "edit": {
+          "*": "allow"
+        },
+        "task": {
+          "*": "deny",
+          "explorer": "allow"
+        },
+        "bash": {
+          "*": "ask",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git ls-remote*": "allow",
+          "git add*": "allow",
+          "git commit*": "allow",
+          "git push*": "deny",
+          "opencode --version": "allow",
+          "*/bin/oc-agent *": "allow",
+          "*/bin/agents-lint *": "allow",
+          "*/bin/smoke-run": "allow",
+          "node --test*": "allow",
+          "python3 -m unittest*": "allow"
+        }
+      }
     }
   }
 }

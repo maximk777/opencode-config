@@ -1,2 +1,7 @@
 humanizer	blader/humanizer	9862685	skills/humanize/SKILL.md
 superpowers-brainstorming	obra/superpowers	b36e0829c6d0	skills/change-brainstorm/SKILL.md
+superpowers-subagent-driven-development	obra/superpowers	b36e0829c6d0	skills/change-execute/SKILL.md
+superpowers-writing-plans	obra/superpowers	b36e0829c6d0	skills/change-plan/SKILL.md
+openspec-cli	Fission-AI/OpenSpec	1.6.0	skills/change-spec/SKILL.md
+opencode	anomalyco/opencode	1.18.30	opencode.json
+openviking	volcengine/OpenViking	v0.4.19	openviking/docker-compose.yml
