@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+import re
+import sys
+from pathlib import Path
+
+NAME = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+MODEL = re.compile(r"^[a-z0-9-]+/[a-z0-9.\-]+$")
+CODE_FENCE = re.compile(r"```(go|ts|typescript|js|javascript|py|python|java|kotlin|kt|rust|rs)\b")
+LINK = re.compile(r"\]\((?!https?://|#)([^)\s]+)\)")
+BACKTICK_PATH = re.compile(r"`([^`\s]*/[^`\s]*)`")
+MAKE_TARGET = re.compile(r"`make ([a-zA-Z0-9_-]+)`")
+
+
+def frontmatter(text):
+    m = re.match(r"---\n(.*?)\n---", text, re.S)
+    meta = {}
+    for line in (m.group(1).splitlines() if m else []):
+        k, sep, v = line.partition(":")
+        if sep:
+            meta[k.strip()] = v.strip()
+    return meta
+
+
+def lint_skills(repo, problems):
+    root = repo / ".agents" / "skills"
+    if not root.exists():
+        return
+    for skill in sorted(p for p in root.iterdir() if p.is_dir()):
+        md = skill / "SKILL.md"
+        rel = md.relative_to(repo)
+        if not md.exists():
+            problems.append(f"{rel}: missing SKILL.md")
+            continue
+        text = md.read_text()
+        meta = frontmatter(text)
+        if not NAME.match(skill.name) or meta.get("name") != skill.name:
+            problems.append(f"{rel}: skill name must be kebab-case and equal the folder name")
+        desc = meta.get("description", "")
+        if not desc or len(desc) > 1024:
+            problems.append(f"{rel}: description missing or longer than 1024 characters")
+        if len(text.split("\n")) > 500:
+            problems.append(f"{rel}: SKILL.md is longer than 500 lines")
+        for target in LINK.findall(text):
+            if len(Path(target).parts) > 2:
+                problems.append(f"{rel}: link {target} goes deeper than one level")
+        is_code = bool(CODE_FENCE.search(text)) or "code" in desc.lower()
+        templates = skill / "templates"
+        if is_code and not (templates.is_dir() and any(templates.iterdir())):
+            problems.append(f"{rel}: code skill has no templates/")
+
+
+def lint_rules(repo, problems):
+    root = repo / ".agents" / "rules"
+    if not root.exists():
+        return
+    makefile = repo / "Makefile"
+    targets = set(re.findall(r"^([a-zA-Z0-9_-]+):", makefile.read_text(), re.M)) if makefile.exists() else set()
+    for rule in sorted(root.glob("*.md")):
+        text = rule.read_text()
+        rel = rule.relative_to(repo)
+        for p in BACKTICK_PATH.findall(text):
+            if p.startswith(("http", "~", "$")) or " " in p:
+                continue
+            if not (repo / p).exists():
+                problems.append(f"{rel}: path {p} does not exist")
+        for t in MAKE_TARGET.findall(text):
+            if t not in targets:
+                problems.append(f"{rel}: make {t} has no Makefile target")
+
+
+def lint_agents(repo, problems):
+    root = repo / ".agents" / "agents"
+    if not root.exists():
+        return
+    for agent in sorted(root.glob("*.md")):
+        meta = frontmatter(agent.read_text())
+        rel = agent.relative_to(repo)
+        if "tools" in meta:
+            problems.append(f"{rel}: frontmatter field tools breaks OpenCode config; use permission")
+        if "model" in meta and not MODEL.match(meta["model"]):
+            problems.append(f"{rel}: model must be provider/model")
+
+
+def lint_symlinks(repo, problems):
+    for kind in ("agents", "skills"):
+        src = repo / ".agents" / kind
+        if not src.exists():
+            continue
+        link = repo / ".opencode" / kind
+        if not link.is_symlink() or link.resolve() != src.resolve():
+            problems.append(f".opencode/{kind}: must be a symlink to ../.agents/{kind}")
+
+
+def lint(repo):
+    repo = Path(repo)
+    problems = []
+    lint_skills(repo, problems)
+    lint_rules(repo, problems)
+    lint_agents(repo, problems)
+    lint_symlinks(repo, problems)
+    return problems
+
+
+def main():
+    repo = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
+    problems = lint(repo)
+    for p in problems:
+        print(f"FAIL {p}")
+    print(f"agents-lint: {len(problems)} problem(s)")
+    sys.exit(1 if problems else 0)
+
+
+if __name__ == "__main__":
+    main()
