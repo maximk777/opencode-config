@@ -17,3 +17,4 @@ Answer the user in Russian. Write documents in English unless the user asks othe
 - Copy diagrams into the work repository docs/ only when the user explicitly asks in this session.
 - Never create or edit architecture files through openviking tools; edit files, then run ~/.config/opencode/bin/ov-sync <project>.
 - If openviking tools fail at session start, say once that memory is unavailable and continue from files.
+- Commit the specs repository only through ~/.config/opencode/bin/specs-commit <project> '<message>'.

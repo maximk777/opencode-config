@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+# The only commit path open to agents: one project's specs repository, one checked message.
+import importlib.machinery
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+BIN = Path(__file__).resolve().parent
+CCM = importlib.machinery.SourceFileLoader("ccm", str(BIN / "check-commit-msg")).load_module()
+PROJECT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def git(repo, *args):
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
+
+
+def commit(project, message, root=None):
+    """Returns (ok, text)."""
+    root = Path(root or os.environ.get("SPECS_ROOT") or Path.home() / "specs")
+    if not PROJECT.match(project) or ".." in project:
+        return False, f"invalid project name: {project!r}"
+    err = CCM.check(message)
+    if err:
+        return False, f"commit message rejected: {err}"
+    repo = root / project
+    if not repo.is_dir():
+        return False, f"no specs directory: {repo}"
+    top = git(repo, "rev-parse", "--show-toplevel")
+    # A specs dir nested inside another repository must not commit that repository.
+    if top.returncode != 0 or Path(top.stdout.strip()).resolve() != repo.resolve():
+        return False, f"not the root of a git repository: {repo}"
+    git(repo, "add", "-A")
+    if git(repo, "diff", "--cached", "--quiet").returncode == 0:
+        return True, "nothing to commit"
+    r = git(repo, "commit", "-q", "-m", message)
+    if r.returncode != 0:
+        return False, (r.stderr or r.stdout).strip()
+    return True, git(repo, "log", "-1", "--format=%h %s").stdout.strip()
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        sys.exit("usage: specs-commit <project> '<type(scope): subject>'")
+    ok, text = commit(sys.argv[1], sys.argv[2])
+    print(text)
+    sys.exit(0 if ok else 1)

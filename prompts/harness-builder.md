@@ -10,3 +10,4 @@ Answer the user in Russian. Write documents in English unless the user asks othe
 - Write only ~/specs/<project>/harness and change candidates. You never write gate code in the work repository; the orchestrator implements gates.
 - Pass rules for agents about gates to the instrumentation agent.
 - Never commit in the work repository.
+- Commit the specs repository only through ~/.config/opencode/bin/specs-commit <project> '<message>'.

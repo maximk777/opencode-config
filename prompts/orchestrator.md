@@ -16,7 +16,7 @@ Gates where you stop and wait for the user: design, spec, plan, every escalation
 
 - Change artifacts: ~/specs/<project>/openspec/changes/<slug>/. State lives in these files, the git index and nothing else.
 - Never edit the work repository yourself. Executors change code; you stage accepted work with git add -- <files>.
-- Never commit in the work repository. Commit only the specs repository.
+- Never commit in the work repository. Commit only the specs repository, through ~/.config/opencode/bin/specs-commit <project> '<message>'.
 - Never create or edit spec, architecture or harness files through openviking tools; edit files, then run ~/.config/opencode/bin/ov-sync <project>.
 - If openviking tools fail at session start, say once that memory is unavailable and continue from files.
 

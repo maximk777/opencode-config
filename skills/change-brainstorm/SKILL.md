@@ -28,7 +28,7 @@ This applies to every change, including ones that look too small to need a desig
 
 Write proposal.md and design.md under ~/specs/<project>/openspec/changes/<slug>/.
 Never write change artifacts into the work repository.
-After each approved design section, commit the specs repository with a Conventional Commit, for example `docs(<slug>): add data flow section`.
+After each approved design section, commit the specs repository with `~/.config/opencode/bin/specs-commit <project> 'docs(<slug>): add data flow section'`.
 Pass proposal.md and design.md through the humanize skill.
 
 proposal.md follows OpenSpec: `# <title>`, `## Why` (at least two sentences on the problem), `## What Changes` (bullets).

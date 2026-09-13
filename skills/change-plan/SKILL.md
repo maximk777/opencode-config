@@ -41,4 +41,4 @@ If the script reports a cycle or missing dependency, fix the briefs' `depends` a
 ## Gate
 
 Stop and ask the user to approve the plan before execution.
-Show the waves and the tier of each task. After approval, commit the specs repository (`docs(<slug>): add plan`), run ~/.config/opencode/bin/ov-sync <project>, and load the change-execute skill.
+Show the waves and the tier of each task. After approval, commit the specs repository with `~/.config/opencode/bin/specs-commit <project> 'docs(<slug>): add plan'`, run ~/.config/opencode/bin/ov-sync <project>, and load the change-execute skill.

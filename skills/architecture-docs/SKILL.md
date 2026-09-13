@@ -41,4 +41,4 @@ Copy diagrams into the work repository docs/ only when the user explicitly asks 
 
 - Read code through the explorer subagent; do not guess how things are built.
 - Discuss one question at a time; propose alternatives with a recommendation.
-- After an accepted document, commit the specs repository and run ~/.config/opencode/bin/ov-sync <project>.
+- After an accepted document, commit the specs repository with `~/.config/opencode/bin/specs-commit <project> '<message>'` and run ~/.config/opencode/bin/ov-sync <project>.
