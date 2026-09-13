@@ -1,21 +1,28 @@
 #!/usr/bin/env bash
 # Runs the approved smoke change through the orchestrator on a throwaway copy of the fixture.
 # The orchestrator ends its turn at every phase_reset, so the session is continued until all tasks are checked.
+# --continue resumes an interrupted run from /tmp/opencode-smoke instead of starting over.
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 RUN=/tmp/opencode-smoke
 MAX_TURNS=8
+MODE="${1:-}"
 export OPENSPEC_TELEMETRY=0
 
-rm -rf "$RUN" && mkdir -p "$RUN"
-cp -R "$REPO/smoke/fixture" "$RUN/work"
-(cd "$RUN/work" && git init -q && git add -A && git -c user.email=smoke@local -c user.name=smoke commit -qm "chore(smoke): init")
-git -C "$RUN/work" rev-parse HEAD > "$RUN/HEAD.before"
-# Task 1.5 arrives already implemented without one scenario, as if submitted before the session.
-cp -R "$REPO/smoke/pending/." "$RUN/work/"
-(cd "$RUN/work" && git add -N internal/clampx)
-cp -R "$REPO/smoke/specs" "$RUN/specs"
-(cd "$RUN/specs" && git init -q && git add -A && git -c user.email=smoke@local -c user.name=smoke commit -qm "docs(smoke): approved change")
+if [[ "$MODE" != "--continue" ]]; then
+  rm -rf "$RUN" && mkdir -p "$RUN"
+  cp -R "$REPO/smoke/fixture" "$RUN/work"
+  (cd "$RUN/work" && git init -q && git add -A && git -c user.email=smoke@local -c user.name=smoke commit -qm "chore(smoke): init")
+  git -C "$RUN/work" rev-parse HEAD > "$RUN/HEAD.before"
+  # Task 1.5 arrives already implemented without one scenario, as if submitted before the session.
+  cp -R "$REPO/smoke/pending/." "$RUN/work/"
+  (cd "$RUN/work" && git add -N internal/clampx)
+  cp -R "$REPO/smoke/specs" "$RUN/specs"
+  (cd "$RUN/specs" && git init -q && git add -A && git -c user.email=smoke@local -c user.name=smoke commit -qm "docs(smoke): approved change")
+elif [[ ! -s "$RUN/events.log" ]]; then
+  echo "smoke-run: nothing to continue in $RUN" >&2
+  exit 1
+fi
 mkdir -p "$HOME/specs"
 ln -sfn "$RUN/specs" "$HOME/specs/opencode-smoke"
 trap 'rm -f "$HOME/specs/opencode-smoke"' EXIT
@@ -26,28 +33,34 @@ for k in OPENVIKING_API_KEY DEEPSEEK_API_KEY; do
 done
 CFG="${OPENCODE_CONFIG_DIR:-$REPO}"
 TASKS="$RUN/specs/openspec/changes/smoke-change/tasks.md"
+PROPOSED="$RUN/specs/proposed-commits.txt"
+ARCHIVE="$RUN/specs/openspec/changes/archive"
+TAIL="When all tasks are accepted, write the proposed commit messages, one per line, to ~/specs/opencode-smoke/proposed-commits.txt."
 START=$(date +%s)
 cd "$RUN/work"
 
-OPENCODE_CONFIG_DIR="$CFG" opencode run --agent orchestrator --format json \
-  --title "[change:opencode-smoke/smoke-change]" \
-  "The spec and the plan for change smoke-change in project opencode-smoke are already approved. Execute it now with the change-execute skill without asking questions. The specs root is ~/specs/opencode-smoke. When all tasks are accepted, write the proposed commit messages, one per line, to ~/specs/opencode-smoke/proposed-commits.txt." \
-  >> "$RUN/events.log" 2>> "$RUN/stderr.log"
+TURN=0
+if [[ "$MODE" != "--continue" ]]; then
+  OPENCODE_CONFIG_DIR="$CFG" opencode run --agent orchestrator --format json \
+    --title "[change:opencode-smoke/smoke-change]" \
+    "The spec and the plan for change smoke-change in project opencode-smoke are already approved. Execute it now with the change-execute skill without asking questions. The specs root is ~/specs/opencode-smoke. $TAIL" \
+    >> "$RUN/events.log" 2>> "$RUN/stderr.log"
+  TURN=1
+fi
 SID=$(grep -o '"sessionID":"[^"]*"' "$RUN/events.log" | head -1 | cut -d'"' -f4)
 
-TURN=1
-ARCHIVE="$RUN/specs/openspec/changes/archive"
-while grep -q '^- \[ \]' "$TASKS" || [[ ! -s "$RUN/specs/proposed-commits.txt" ]] || [[ -z "$(ls -A "$ARCHIVE" 2>/dev/null)" ]]; do
+# The archive moves tasks.md away, so a missing file means no open tasks.
+while grep -qs '^- \[ \]' "$TASKS" || [[ ! -s "$PROPOSED" ]] || [[ -z "$(ls -A "$ARCHIVE" 2>/dev/null)" ]]; do
   [[ $TURN -ge $MAX_TURNS ]] && break
   TURN=$((TURN + 1))
   OPENCODE_CONFIG_DIR="$CFG" opencode run --agent orchestrator --format json --session "$SID" \
-    "Continue the change smoke-change from its files. Do not ask questions. When all tasks are accepted, write the proposed commit messages, one per line, to ~/specs/opencode-smoke/proposed-commits.txt." \
+    "Continue the change smoke-change from its files. Do not ask questions. $TAIL" \
     >> "$RUN/events.log" 2>> "$RUN/stderr.log"
 done
 END=$(date +%s)
 
 {
-  echo "## Smoke run $(date '+%Y-%m-%d %H:%M')"
+  echo "## Smoke run $(date '+%Y-%m-%d %H:%M') ${MODE}"
   echo "Duration: $((END - START)) s, turns: $TURN"
   "$REPO/bin/smoke-check" "$RUN" || true
   echo
