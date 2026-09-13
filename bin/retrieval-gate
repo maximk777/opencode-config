@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import re
 import subprocess
 import sys
@@ -34,10 +35,23 @@ def openviking_top3(query):
     return re.findall(r"viking://\S+", out)[:3]
 
 
+def basic_memory_results(out):
+    start = out.find("{")
+    if start < 0:
+        return []
+    try:
+        data, _ = json.JSONDecoder().raw_decode(out[start:])
+    except ValueError:
+        return []
+    # One string per result, so a fact matching any of its identifiers counts once and ranks by result, not by field.
+    return [" ".join(str(r.get(k, "")) for k in ("permalink", "title", "file_path")).strip()
+            for r in data.get("results", [])[:3]]
+
+
 def basic_memory_top3(query):
     out = subprocess.run(["basic-memory", "tool", "search-notes", "--project", "memory", query],
                          capture_output=True, text=True).stdout
-    return re.findall(r'"(?:permalink|title|file_path)":\s*"([^"]+)"', out)[:3]
+    return basic_memory_results(out)
 
 
 def main():
