@@ -37,7 +37,7 @@ function expectAll(agent, permission, action, inputs) {
   for (const input of inputs) assert.equal(decide(agent, permission, input), action, `${agent} ${permission}: ${input}`);
 }
 
-const PRIMARY = ["orchestrator", "architect", "harness-builder", "instrumentation", "setup-improver"];
+const PRIMARY = ["orchestrator", "architect", "harness-builder", "instrumentation", "workspace-builder", "setup-improver"];
 const HOME = homedir();
 
 test("primary agents read freely", () => {
@@ -101,7 +101,7 @@ test("secrets stay out of bash output", () => {
 });
 
 test("only setup-improver commits, and never through git -C", () => {
-  for (const a of ["orchestrator", "architect", "harness-builder", "instrumentation", "executor", "executor-strong"]) {
+  for (const a of ["orchestrator", "architect", "harness-builder", "instrumentation", "workspace-builder", "executor", "executor-strong"]) {
     expectAll(a, "bash", "deny", ["git commit -m x", "git -C /w commit -m x", "git -c a=b commit", "git push", "git -C /w push"]);
   }
   expectAll("setup-improver", "bash", "allow", ["git add prompts/x.md", "git commit -m 'fix(x): y'"]);
