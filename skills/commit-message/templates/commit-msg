@@ -1,0 +1,2 @@
+#!/bin/sh
+exec python3 "$HOME/.config/opencode/bin/check-commit-msg" "$1"

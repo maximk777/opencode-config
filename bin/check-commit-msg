@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+import re
+import sys
+
+TYPES = "feat|fix|refactor|test|docs|chore|perf|build|ci"
+PATTERN = re.compile(rf"^({TYPES})\([a-z0-9-]+\): [a-z][^\n]*$")
+
+
+def check(msg: str):
+    lines = [l for l in msg.strip("\n").split("\n") if not l.startswith("#")]
+    if not lines or not lines[0]:
+        return "empty message"
+    if len([l for l in lines if l.strip()]) > 1:
+        return "body or trailers are not allowed"
+    if len(lines[0]) > 72:
+        return "subject longer than 72 characters"
+    if not PATTERN.match(lines[0]):
+        return "expected type(scope): lowercase subject"
+    return None
+
+
+if __name__ == "__main__":
+    text = open(sys.argv[1]).read() if len(sys.argv) > 1 else sys.stdin.read()
+    err = check(text)
+    if err:
+        print(f"commit message rejected: {err}")
+        sys.exit(1)
