@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import re
+from pathlib import Path
+
+
+def parse_brief(path):
+    text = Path(path).read_text()
+    m = re.match(r"---\n(.*?)\n---", text, re.S)
+    meta = {}
+    for line in (m.group(1).splitlines() if m else []):
+        k, _, v = line.partition(":")
+        meta[k.strip()] = v.strip()
+
+    def split(s):
+        return [x.strip() for x in s.split(",") if x.strip()]
+
+    return {
+        "task": meta.get("task"),
+        "files": split(meta.get("files", "")),
+        "depends": split(meta.get("depends", "")),
+        "skeleton": meta.get("skeleton", "no") == "yes",
+    }
+
+
+def done_tasks(tasks_md):
+    return set(re.findall(r"^- \[x\] (\d+(?:\.\d+)*)", Path(tasks_md).read_text(), re.M))
+
+
+def conflict(a, b):
+    for fa in a["files"]:
+        for fb in b["files"]:
+            if fa == fb:
+                return True
+            # Go compiles a whole package, so two tasks in one directory break each other's builds.
+            if fa.endswith(".go") and fb.endswith(".go") and os.path.dirname(fa) == os.path.dirname(fb):
+                return True
+    return False
+
+
+def plan_waves(briefs, done, concurrency=3):
+    pending = {b["task"]: b for b in briefs if b["task"] not in done}
+    finished, waves = set(done), []
+    while pending:
+        ready = [b for b in pending.values() if all(d in finished for d in b["depends"])]
+        if not ready:
+            raise SystemExit("cycle or missing dependency: " + " ".join(sorted(pending)))
+        wave = []
+        for b in sorted(ready, key=lambda b: [int(x) for x in b["task"].split(".")]):
+            if len(wave) < concurrency and not any(conflict(b, w) for w in wave):
+                wave.append(b)
+        waves.append(wave)
+        for b in wave:
+            finished.add(b["task"])
+            pending.pop(b["task"])
+    return waves
+
+
+def tier(b):
+    return "executor" if b["skeleton"] or len(b["files"]) <= 2 else "executor-strong"
+
+
+def main():
+    p = argparse.ArgumentParser(description="Split a change's tasks into waves and assign executor tiers")
+    p.add_argument("change_dir")
+    p.add_argument("--concurrency", type=int, default=3)
+    a = p.parse_args()
+    d = Path(a.change_dir)
+    briefs = [parse_brief(f) for f in sorted((d / "briefs").glob("*.md"))]
+    waves = plan_waves(briefs, done_tasks(d / "tasks.md"), a.concurrency)
+    for i, w in enumerate(waves, 1):
+        print(f"wave {i}: " + " ".join(b["task"] for b in w))
+    for w in waves:
+        for b in w:
+            print(f"tier {b['task']} {tier(b)}")
+
+
+if __name__ == "__main__":
+    main()
