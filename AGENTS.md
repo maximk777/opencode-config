@@ -6,7 +6,8 @@ Answer the user in Russian. Write prompts, skills, rules and code comments in En
 
 ## Commits
 
-Never commit unless the user asks.
+Never commit in a work repository unless the user asks.
+Specs repositories under ~/specs are committed through ~/.config/opencode/bin/specs-commit whenever a flow skill says so; that needs no extra request.
 Commit messages are one English line: type(scope): subject.
 Types: feat, fix, refactor, test, docs, chore, perf, build, ci. No body, no trailers. Use the commit-message skill.
 Install a commit-msg hook only into a specific repository and only on request; never set core.hooksPath globally.

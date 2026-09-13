@@ -35,7 +35,7 @@ CFG="${OPENCODE_CONFIG_DIR:-$REPO}"
 TASKS="$RUN/specs/openspec/changes/smoke-change/tasks.md"
 PROPOSED="$RUN/specs/proposed-commits.txt"
 ARCHIVE="$RUN/specs/openspec/changes/archive"
-TAIL="When all tasks are accepted, write the proposed commit messages, one per line, to ~/specs/opencode-smoke/proposed-commits.txt."
+TAIL="Finish the change as the change-execute skill says, including the archive and the specs commit. As the last step, instead of waiting for the user, write the proposed commit messages, one per line, to ~/specs/opencode-smoke/proposed-commits.txt."
 START=$(date +%s)
 cd "$RUN/work"
 

@@ -49,5 +49,9 @@ When execution shows the spec is wrong, stop the wave and switch to the change-s
 
 ## Finish
 
-After the last wave run the full verification, request a final review of the whole change, then run openspec archive <slug> --yes from ~/specs/<project>.
-Archive before proposing commits. Then commit the specs repository with `~/.config/opencode/bin/specs-commit <project> '<message>'`, run ~/.config/opencode/bin/ov-sync <project>, check each proposed message with `printf '%s\n' '<message>' | ~/.config/opencode/bin/check-commit-msg`, and present to the user: what changed, the verification output, and the proposed commits with their files.
+The change is not finished until every step below has run, in this order:
+1. After the last wave run the full verification, request a final review of the whole change, then run openspec archive <slug> --yes from ~/specs/<project>.
+2. Archive before proposing commits. Then commit the specs repository with `~/.config/opencode/bin/specs-commit <project> 'docs(<slug>): archive change'`; this commit needs no request from the user.
+3. Run ~/.config/opencode/bin/ov-sync <project>.
+4. Check each proposed message with `printf '%s\n' '<message>' | ~/.config/opencode/bin/check-commit-msg`.
+5. Present to the user: what changed, the verification output, and the proposed commits with their files.
