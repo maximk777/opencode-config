@@ -1,0 +1,11 @@
+{
+  "name": "workspace",
+  "version": "0.1.0",
+  "templated": [
+    "AGENTS.md",
+    "README.md",
+    "REPOSITORIES.md",
+    "docs/ARCHITECTURE.md",
+    "tracker/tracker.json"
+  ]
+}
