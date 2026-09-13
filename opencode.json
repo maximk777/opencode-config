@@ -110,7 +110,8 @@
           "mkdir *": "allow",
           "*/bin/waves *": "allow",
           "*/bin/change-state *": "allow",
-          "*/bin/check-commit-msg*": "allow"
+          "*/bin/check-commit-msg*": "allow",
+          "*/bin/ov-sync *": "allow"
         }
       }
     },
@@ -308,6 +309,16 @@
           "python3 -m unittest*": "allow"
         }
       }
+    }
+  },
+  "mcp": {
+    "openviking": {
+      "type": "remote",
+      "url": "http://127.0.0.1:1933/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:OPENVIKING_API_KEY}"
+      },
+      "enabled": true
     }
   }
 }
