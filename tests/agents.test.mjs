@@ -29,7 +29,7 @@ test("nobody in the change flow can commit", () => {
 });
 
 test("orchestrator edits only specs and dispatches only the flow subagents", () => {
-  assert.deepEqual(A.orchestrator.permission.edit, { "*": "deny", "*specs/*": "allow" });
+  assert.deepEqual(A.orchestrator.permission.edit, { "*": "deny", "../*specs/*": "allow" });
   assert.deepEqual(A.orchestrator.permission.task, {
     "*": "deny", executor: "allow", "executor-strong": "allow", "task-reviewer": "allow", explorer: "allow",
   });

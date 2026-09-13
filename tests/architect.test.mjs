@@ -22,7 +22,7 @@ test("architect is primary on the smart tier and only calls explorer", () => {
   assert.equal(a.mode, "primary");
   assert.equal(a.model, "{file:./tiers/smart}");
   assert.deepEqual(a.permission.task, { "*": "deny", explorer: "allow" });
-  assert.deepEqual(a.permission.edit, { "*": "deny", "*specs/*/architecture/*": "allow" });
+  assert.deepEqual(a.permission.edit, { "*": "deny", "../*specs/*/architecture/*": "allow" });
 });
 
 test("change command reads candidate cards", () => {

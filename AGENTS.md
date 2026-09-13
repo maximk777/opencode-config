@@ -25,6 +25,11 @@ Never run opencode debug config. It prints resolved secrets.
 
 Pass long texts through the humanize skill. This covers ADRs, proposals, designs, change summaries, story and task descriptions.
 
+## Shell
+
+Read files with the read, grep and glob tools. In bash, primary agents need the user's approval for redirections, sed, awk, xargs, find -exec and git -C.
+Use `cd <dir> && git <command>` instead of git -C.
+
 ## Verification
 
 Do not claim work is done without running the check that proves it and reading its output.
