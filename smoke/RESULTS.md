@@ -37,3 +37,29 @@ SMOKE FAIL
 ## Smoke run 2026-09-13 19:45
 Duration: 949 s, turns: 3
 
+## Smoke run 2026-09-13 20:39 --continue
+Duration: 673 s, turns: 8
+head unchanged
+staged files: 8
+tasks checked: 5/5
+reviewer rejected: 2
+fix rounds dispatched: 2
+resumed after reset
+specs commits: 1
+commits proposed ok
+go test ok
+SMOKE FAIL
+
+## Smoke run 2026-09-13 20:44 --continue
+Duration: 235 s, turns: 1
+head unchanged
+staged files: 8
+tasks checked: 5/5
+reviewer rejected: 2
+fix rounds dispatched: 2
+resumed after reset
+specs commits: 2
+commits proposed ok
+go test ok
+SMOKE PASS
+
