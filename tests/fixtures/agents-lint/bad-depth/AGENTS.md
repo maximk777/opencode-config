@@ -1,0 +1,3 @@
+# Agents
+
+See .agents/rules.
