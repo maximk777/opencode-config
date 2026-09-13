@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import string
 import subprocess
@@ -19,7 +20,18 @@ def read_env(path):
 
 
 def render_config(template_text, env):
-    return string.Template(template_text).substitute(env)
+    # Values land inside JSON string literals, so they are JSON-escaped and the result is parsed to fail before writing.
+    escaped = {k: json.dumps(v)[1:-1] for k, v in env.items()}
+    text = string.Template(template_text).substitute(escaped)
+    json.loads(text)
+    return text
+
+
+def write_private(path, text):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        os.fchmod(fd, 0o600)
+        f.write(text)
 
 
 def main():
@@ -27,8 +39,7 @@ def main():
     if not env_file.exists():
         sys.exit("ov-up: ~/.openviking/.env is missing")
     conf = HOME_DIR / "ov.conf"
-    conf.write_text(render_config((REPO / "openviking" / "ov.conf.template").read_text(), read_env(env_file)))
-    os.chmod(conf, 0o600)
+    write_private(conf, render_config((REPO / "openviking" / "ov.conf.template").read_text(), read_env(env_file)))
     subprocess.run(["ollama", "pull", "bge-m3"], check=True, stdout=subprocess.DEVNULL)
     subprocess.run(["docker", "compose", "-f", str(REPO / "openviking" / "docker-compose.yml"), "up", "-d"], check=True)
     print("ov-up: started")
