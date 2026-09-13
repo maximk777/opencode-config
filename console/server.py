@@ -34,7 +34,7 @@ def write_tier(repo, name, model, models, git=repo_git):
         raise ValueError(f"unknown model {model}")
     (Path(repo) / "tiers" / name).write_text(model + "\n")
     git("add", f"tiers/{name}")
-    git("commit", "-m", f"chore(tiers): set {name} to {model.split('/', 1)[1]}")
+    git("commit", "-m", f"chore(tiers): set {name} to {model.split('/', 1)[1]}", "--", f"tiers/{name}")
 
 
 def render_row(name, current, models):
