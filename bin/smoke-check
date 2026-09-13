@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+import importlib.machinery
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+BIN = Path(__file__).resolve().parent
+CCM = importlib.machinery.SourceFileLoader("ccm", str(BIN / "check-commit-msg")).load_module()
+
+
+def git(work, *args):
+    return subprocess.run(["git", *args], cwd=work, capture_output=True, text=True).stdout.strip()
+
+
+def brief_files(change):
+    files = set()
+    for b in (change / "briefs").glob("*.md"):
+        m = re.search(r"^files:\s*(.*)$", b.read_text(), re.M)
+        if m:
+            files.update(f.strip() for f in m.group(1).split(",") if f.strip())
+    return files
+
+
+def run_checks(run, run_go_test=True):
+    run = Path(run)
+    work = run / "work"
+    change = next((run / "specs" / "openspec" / "changes").iterdir())
+    lines, ok = [], True
+
+    if git(work, "rev-parse", "HEAD") == (run / "HEAD.before").read_text().strip():
+        lines.append("head unchanged")
+    else:
+        lines.append("head moved"); ok = False
+
+    staged = [f for f in git(work, "diff", "--cached", "--name-only").splitlines() if f]
+    outside = sorted(set(staged) - brief_files(change))
+    lines.append(f"staged files: {len(staged)}")
+    if outside:
+        lines.append("outside briefs: " + ", ".join(outside)); ok = False
+
+    tasks = (change / "tasks.md").read_text()
+    done = len(re.findall(r"^- \[x\] ", tasks, re.M))
+    total = done + len(re.findall(r"^- \[ \] ", tasks, re.M))
+    lines.append(f"tasks checked: {done}/{total}")
+    ok = ok and total > 0 and done == total
+
+    rejected = sum(len(re.findall(r"^Verdict: NOT COMPLIANT", r.read_text(), re.M)) for r in (change / "reports").glob("*.md"))
+    lines.append(f"reviewer rejected: {rejected}")
+    ok = ok and rejected >= 1
+
+    events = (run / "events.log").read_text() if (run / "events.log").exists() else ""
+    reset_at = events.find("phase_reset")
+    if reset_at >= 0 and events.find('"task"', reset_at) > reset_at:
+        lines.append("resumed after reset")
+    else:
+        lines.append("no reset observed"); ok = False
+
+    commits = [c for c in (run / "proposed-commits.txt").read_text().splitlines() if c.strip()] if (run / "proposed-commits.txt").exists() else []
+    bad = [c for c in commits if CCM.check(c)]
+    if commits and not bad:
+        lines.append("commits proposed ok")
+    else:
+        lines.append("commits proposed bad: " + "; ".join(bad or ["none proposed"])); ok = False
+
+    if run_go_test:
+        r = subprocess.run(["go", "test", "./..."], cwd=work, capture_output=True, text=True)
+        lines.append("go test ok" if r.returncode == 0 else "go test failed")
+        ok = ok and r.returncode == 0
+
+    lines.append("SMOKE PASS" if ok else "SMOKE FAIL")
+    return lines
+
+
+if __name__ == "__main__":
+    out = run_checks(sys.argv[1] if len(sys.argv) > 1 else "/tmp/opencode-smoke")
+    print("\n".join(out))
+    sys.exit(0 if out[-1] == "SMOKE PASS" else 1)
