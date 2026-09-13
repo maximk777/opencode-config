@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+SECRET_PATTERNS = [
+    re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
+    re.compile(r"sk-[A-Za-z0-9]{20,}"),
+    re.compile(r"ghp_[A-Za-z0-9]{20,}"),
+    re.compile(r"glpat-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"(?i)bearer\s+[A-Za-z0-9._-]{20,}"),
+    re.compile(r"(?i)(api[_-]?key|token|password)\s*[:=]\s*\S{12,}"),
+]
+
+
+def find_secrets(text):
+    return [m.group(0) for p in SECRET_PATTERNS for m in p.finditer(text)]
+
+
+def title_of(path, text):
+    m = re.search(r"^title:\s*(.+)$", text, re.M) or re.search(r"^#\s+(.+)$", text, re.M)
+    return (m.group(1) if m else path.stem).strip().replace("|", "/")
+
+
+def triage_rows(facts):
+    rows = ["| # | Source | Title | Proposed | Reason |", "|---|---|---|---|---|"]
+    for i, (source, title, text) in enumerate(facts, 1):
+        if find_secrets(text):
+            rows.append(f"| {i} | {source} | {title} | drop | contains secret |")
+        else:
+            rows.append(f"| {i} | {source} | {title} |  |  |")
+    return "\n".join(rows)
+
+
+def main():
+    if len(sys.argv) != 2:
+        sys.exit("usage: memory-export <out-dir>")
+    out = Path(sys.argv[1]).expanduser()
+    (out / "magent").mkdir(parents=True, exist_ok=True)
+    subprocess.run(["magent", "export", "--into", str(out / "magent")], check=True, stdout=subprocess.DEVNULL)
+    mem = Path.home() / "memory"
+    if mem.exists():
+        shutil.copytree(mem, out / "memory", dirs_exist_ok=True)
+    facts = []
+    for f in sorted(p for p in out.rglob("*.md") if p.name != "triage.md"):
+        text = f.read_text(errors="ignore")
+        facts.append((str(f.relative_to(out)), title_of(f, text), text))
+    (out / "triage.md").write_text(triage_rows(facts) + "\n")
+    print(f"memory-export: {len(facts)} facts, triage table at {out / 'triage.md'}")
+
+
+if __name__ == "__main__":
+    main()
