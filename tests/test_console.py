@@ -1,8 +1,11 @@
+import http.client
 import importlib.machinery
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
+from http.server import HTTPServer
 from pathlib import Path
 
 C = importlib.machinery.SourceFileLoader("console_server", "console/server.py").load_module()
@@ -66,6 +69,44 @@ class Console(unittest.TestCase):
         with self.assertRaises(ValueError):
             C.write_tier(self.repo, "deep", "deepseek/deepseek-flash", C.list_models(lambda: MODELS_OUTPUT), self.git)
         self.assertEqual(self.git_calls, [])
+
+
+class OriginCheck(unittest.TestCase):
+    def setUp(self):
+        class Quiet(C.Handler):
+            def log_message(self, *a):
+                pass
+        self.writes = []
+        self.real_write_tier = C.write_tier
+        C.write_tier = lambda repo, name, model, models: self.writes.append((name, model))
+        self.server = HTTPServer(("127.0.0.1", 0), Quiet)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        C.write_tier = self.real_write_tier
+
+    def post(self, origin=None):
+        conn = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        if origin:
+            headers["Origin"] = origin
+        conn.request("POST", "/tier/fast", body="model=deepseek%2Fdeepseek-flash", headers=headers)
+        status = conn.getresponse().status
+        conn.close()
+        return status
+
+    def test_foreign_origin_rejected(self):
+        self.assertEqual(self.post("http://evil.example"), 403)
+        self.assertEqual(self.post("http://127.0.0.1:7778"), 403)
+        self.assertEqual(self.writes, [])
+
+    def test_console_origin_and_no_origin_allowed(self):
+        self.assertEqual(self.post("http://127.0.0.1:7777"), 200)
+        self.assertEqual(self.post("http://localhost:7777"), 200)
+        self.assertEqual(self.post(), 200)
+        self.assertEqual(len(self.writes), 3)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 HOST, PORT = "127.0.0.1", 7777
+ALLOWED_ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"}
 
 
 def opencode_models():
@@ -68,6 +69,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send(200, page)
 
     def do_POST(self):
+        # A browser always sends Origin on cross-site POSTs; requests without it (curl) come from this machine anyway.
+        origin = self.headers.get("Origin")
+        if origin is not None and origin not in ALLOWED_ORIGINS:
+            return self.send(403, "forbidden origin")
         if not self.path.startswith("/tier/"):
             return self.send(404, "not found")
         name = self.path.rsplit("/", 1)[1]
