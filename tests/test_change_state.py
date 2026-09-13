@@ -27,6 +27,9 @@ class ChangeState(unittest.TestCase):
             "1.4": "# Report 1.4\nStatus: DONE\n" + rejected + "## Attempt 2\nStatus: DONE\n",
             "1.5": "# Report 1.5\nStatus: DONE\n" + rejected + "## Attempt 2\nStatus: DONE\n## Review round 2\nVerdict: COMPLIANT\n",
         }
+        reports["1.7"] = "# Report 1.7\n## Attempt 2\nStatus: DONE\n# Report 1.7\nStatus: DONE\n" + rejected
+        open_tasks.append("1.7")
+        (ch / "tasks.md").write_text("## 1. Ping\n- [x] 1.1 Add handler\n" + "".join(f"- [ ] {n} Step\n" for n in open_tasks))
         for n, text in reports.items():
             (ch / "reports" / f"{n}.md").write_text(text)
         (ch / "waves.md").write_text("wave 1: 1.1\nwave 2: " + " ".join(open_tasks) + "\n")
@@ -34,10 +37,10 @@ class ChangeState(unittest.TestCase):
 
     def test_done_and_open(self):
         self.assertEqual(self.state["tasks_done"], ["1.1"])
-        self.assertEqual(self.state["tasks_open"], ["1.2", "1.3", "1.4", "1.5", "1.6"])
+        self.assertEqual(self.state["tasks_open"], ["1.2", "1.3", "1.4", "1.5", "1.6", "1.7"])
 
     def test_awaiting_review_without_verdict_or_after_new_attempt(self):
-        self.assertEqual(self.state["awaiting_review"], ["1.2", "1.4"])
+        self.assertEqual(self.state["awaiting_review"], ["1.2", "1.4", "1.7"])
 
     def test_last_verdict_decides(self):
         self.assertEqual(self.state["needs_fix"], ["1.3"])
