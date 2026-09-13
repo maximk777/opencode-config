@@ -74,6 +74,7 @@ flowchart LR
 | Место | Содержимое | Git |
 |---|---|---|
 | `~/.config/opencode/` | `opencode.json`, `tiers/`, `prompts/`, `skills/`, `commands/`, `bin/agents-lint`, `AGENTS.md` | личная репа сетапа |
+| `~/.config/opencode/kits/workspace/` | кит workspace: дерево, которое `bin/workspace-kit` копирует в командные workspace; версия в `kits/workspace/kit.json` | личная репа сетапа |
 | `~/specs/<project>/openspec/` | `specs/`, `changes/<slug>/` (proposal, design, specs-дельты, tasks.md, briefs/, reports/, waves.md), `changes/archive/` | личная репа спек, в рабочие репы не попадает |
 | `~/specs/<project>/architecture/` | `adr/`, `diagrams/` (Mermaid), `roadmap.md`, `backlog/`, `poc/<slug>/` (README с гипотезой, код, `RESULT.md` с цифрами) | та же личная репа |
 | `~/specs/<project>/harness/` | `profile.md`, `error-background.md`, `gates.md` | та же личная репа |
@@ -101,6 +102,7 @@ flowchart LR
 | `explorer` | subagent | fast | — | ничего | чтение и поиск по коду |
 | `harness-builder` | primary | smart | explorer | `~/specs/<p>/harness/**`, временный worktree с пробами | фон ошибок и ворота |
 | `instrumentation` | primary | smart | explorer | `AGENTS.md`, `.agents/**` и симлинки `.opencode/{agents,skills}` проекта | специализированные под проект правила, скиллы и агенты |
+| `workspace-builder` | primary | smart | explorer | файлы целевого workspace | создание и расширение командных workspace через скиллы `workspace-create` и `workspace-extend` |
 | `setup-improver` | primary | smart | explorer | `~/.config/opencode/**` | улучшение самого сетапа |
 
 Встроенные `build` и `plan` OpenCode остаются для обычной работы вне процессов.
@@ -387,7 +389,7 @@ Tier-файлы — единственное место назначения м�
 - глобальный `commit-msg` хук;
 - tier `deep` для архитектора;
 - Serena, Playwright, actionbook, context7, basic-memory, плагин superpowers;
-- workspace builder (связывание реп домена, документация, шаблоны задач, стори и эпиков, выгрузка в трекер через MCP) — отдельное следующее изменение.
+- жизненный цикл стримов и профили, трекер и статус, normalize и repo-kits для workspace builder — следующие изменения workspace-lifecycle, workspace-tracker-status, workspace-normalize.
 
 ## 13. Отвергнутые варианты
 
@@ -434,6 +436,20 @@ Tier-файлы — единственное место назначения м�
   - Повторный `ov add-resource ... --to <тот же uri>` переиндексирует без ошибок, поэтому `bin/ov-sync` — одна команда.
 - **Serena** удалена из живого конфига по просьбе.
 - **Проверка модели агента:** `bin/oc-agent <agent>`.
+
+## Workspace builder
+
+Кит командного workspace лежит в `kits/workspace/`. Это дерево повторяет созданный workspace файл в файл. `kits/workspace/kit.json` хранит `name`, `version` и `templated`; версия кита записывается в каждый созданный workspace.
+
+`bin/workspace-kit create` копирует кит в целевую папку и подставляет значения в шаблонные файлы из `templated`. Агент `workspace-builder` (primary, smart) создаёт и расширяет workspace через скиллы `workspace-create` и `workspace-extend` и правит только файлы целевого workspace.
+
+В workspace есть `AGENTS.md`, `.agents/` с ролями, правилами, скиллами и шаблонами, сгенерированные переходники под харнесы, `tools/check.py` и `tools/generate.py` и личный слой `.local/`. Скрипты работают на стандартной библиотеке Python 3.9 без зависимостей.
+
+CI в ядро не входит. Для работы без Python в скиллах есть рецепты с ручными шагами. Каждый merge request мёрджит человек.
+
+Тесты: `tests/test_workspace_*.py`, `tests/workspace-kit.test.mjs` и `bin/workspace-py39`, который гоняет тесты скриптов workspace в Docker-образе `python:3.9`. Приёмочный прогон `bin/workspace-smoke` пишет результаты в `smoke/WORKSPACE-RESULTS.md`.
+
+Следующие изменения: `workspace-lifecycle` (жизненный цикл стримов и профили), `workspace-tracker-status` (трекер и статус), `workspace-normalize` (normalize и repo-kits).
 
 ## 14. Источники
 
