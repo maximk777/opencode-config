@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""Create a team workspace from the vendored kit."""
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+PARAMS = ["workspace_name", "title", "forge", "id_pattern", "tracker_url"]
+FORGES = {"gitlab", "github", "git"}
+
+
+def fail(message):
+    print(f"workspace-kit: {message}", file=sys.stderr)
+    sys.exit(2)
+
+
+def parse_params(pairs):
+    """Turn key=value pairs into a dict; fail on missing, unknown or invalid values."""
+    params = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep:
+            fail(f"parameter {pair!r} is not key=value")
+        if key not in PARAMS:
+            fail(f"unknown parameter {key}")
+        params[key] = value
+    missing = [key for key in PARAMS if key not in params]
+    if missing:
+        fail(f"missing parameter {', '.join(missing)}")
+    if params["forge"] not in FORGES:
+        fail(f"parameter forge must be one of {', '.join(sorted(FORGES))}, got {params['forge']!r}")
+    try:
+        re.compile(params["id_pattern"])
+    except re.error as exc:
+        fail(f"parameter id_pattern is not a valid regular expression: {exc}")
+    if "{id}" not in params["tracker_url"]:
+        fail(f"parameter tracker_url must contain {{id}}, got {params['tracker_url']!r}")
+    # Keep the stamp in the canonical parameter order regardless of argument order.
+    return {key: params[key] for key in PARAMS}
+
+
+def substitute(text, params, json_file):
+    for key, value in params.items():
+        if json_file:
+            value = json.dumps(value)[1:-1]
+        text = text.replace("{{" + key + "}}", value)
+    return text
+
+
+def create(target, params, kit):
+    """Assemble in a sibling temp dir named .workspace-kit-*, run the generator, then move into target."""
+    meta = json.loads((kit / "kit.json").read_text(encoding="utf-8"))
+    tmp = Path(tempfile.mkdtemp(prefix=".workspace-kit-", dir=str(target.parent)))
+    try:
+        ws = tmp / "ws"
+
+        def ignore(directory, names):
+            skipped = [name for name in names if name == "__pycache__"]
+            if Path(directory) == kit and "kit.json" in names:
+                skipped.append("kit.json")
+            return skipped
+
+        shutil.copytree(str(kit), str(ws), ignore=ignore)
+        for rel in meta.get("templated", []):
+            path = ws / rel
+            text = path.read_text(encoding="utf-8")
+            path.write_text(substitute(text, params, rel.endswith(".json")), encoding="utf-8")
+        stamp = {"name": meta["name"], "version": meta["version"], "params": params}
+        (ws / ".agents").mkdir(exist_ok=True)
+        (ws / ".agents/kit.json").write_text(json.dumps(stamp, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "tools/generate.py"], cwd=str(ws), capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            sys.stderr.write(result.stdout)
+            sys.stderr.write(result.stderr)
+            print(f"workspace-kit: tools/generate.py exited {result.returncode}", file=sys.stderr)
+            sys.exit(1)
+        if target.is_dir():
+            target.rmdir()
+        os.rename(str(ws), str(target))
+    finally:
+        shutil.rmtree(str(tmp), ignore_errors=True)
+    print(f"created {target} from kit {meta['name']} {meta['version']}")
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="workspace-kit")
+    sub = parser.add_subparsers(dest="command", required=True)
+    c = sub.add_parser("create")
+    c.add_argument("target")
+    c.add_argument("--param", action="append", default=[])
+    c.add_argument("--kit", default=str(REPO / "kits/workspace"))
+    args = parser.parse_args()
+    params = parse_params(args.param)
+    kit = Path(args.kit).resolve()
+    if not (kit / "kit.json").is_file():
+        fail(f"kit {kit} has no kit.json")
+    target = Path(args.target).resolve()
+    if target.exists():
+        if not target.is_dir():
+            fail(f"target {target} exists and is not a directory")
+        if any(target.iterdir()):
+            fail(f"target {target} is not empty")
+    if not target.parent.is_dir():
+        fail(f"parent directory {target.parent} does not exist")
+    create(target, params, kit)
+
+
+if __name__ == "__main__":
+    main()
