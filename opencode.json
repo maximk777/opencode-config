@@ -208,6 +208,40 @@
           "*/bin/ov-sync *": "allow"
         }
       }
+    },
+    "harness-builder": {
+      "mode": "primary",
+      "description": "Measures a service's error background and designs evidence-backed quality gates",
+      "model": "{file:./tiers/smart}",
+      "prompt": "{file:./prompts/harness-builder.md}",
+      "permission": {
+        "edit": {
+          "*": "deny",
+          "*specs/*/harness/*": "allow",
+          "*.harness-probe-*": "allow"
+        },
+        "task": {
+          "*": "deny",
+          "explorer": "allow"
+        },
+        "bash": {
+          "*": "ask",
+          "git status*": "allow",
+          "git log*": "allow",
+          "git diff*": "allow",
+          "git -C *": "allow",
+          "git worktree add*": "allow",
+          "git worktree remove*": "allow",
+          "docker compose *": "allow",
+          "go test*": "allow",
+          "npm test*": "allow",
+          "mkdir *": "allow",
+          "*/bin/error-background *": "allow",
+          "*/bin/ov-sync *": "allow",
+          "git commit*": "deny",
+          "git push*": "deny"
+        }
+      }
     }
   }
 }
