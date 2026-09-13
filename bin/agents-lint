@@ -4,11 +4,14 @@ import sys
 from pathlib import Path
 
 NAME = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-MODEL = re.compile(r"^[a-z0-9-]+/[a-z0-9.\-]+$")
+# Model ids may contain further slashes and tags, e.g. openrouter/vendor/model or ollama/qwen3:8b.
+MODEL = re.compile(r"^[a-z0-9_-]+/[^\s/][^\s]*$")
 CODE_FENCE = re.compile(r"```(go|ts|typescript|js|javascript|py|python|java|kotlin|kt|rust|rs)\b")
 LINK = re.compile(r"\]\((?!https?://|#)([^)\s]+)\)")
 BACKTICK_PATH = re.compile(r"`([^`\s]*/[^`\s]*)`")
 MAKE_TARGET = re.compile(r"`make ([a-zA-Z0-9_-]+)`")
+MAKE_RULE = re.compile(r"^([^\s:=#.][^:=#]*):(?!=)", re.M)
+NOT_A_PATH = re.compile(r"[*?<>{}]|://|^/")
 
 
 def frontmatter(text):
@@ -17,7 +20,10 @@ def frontmatter(text):
     for line in (m.group(1).splitlines() if m else []):
         k, sep, v = line.partition(":")
         if sep:
-            meta[k.strip()] = v.strip()
+            v = v.strip()
+            if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+                v = v[1:-1]
+            meta[k.strip()] = v
     return meta
 
 
@@ -43,7 +49,7 @@ def lint_skills(repo, problems):
         for target in LINK.findall(text):
             if len(Path(target).parts) > 2:
                 problems.append(f"{rel}: link {target} goes deeper than one level")
-        is_code = bool(CODE_FENCE.search(text)) or "code" in desc.lower()
+        is_code = bool(CODE_FENCE.search(text)) or bool(re.search(r"\bcode\b", desc, re.I))
         templates = skill / "templates"
         if is_code and not (templates.is_dir() and any(templates.iterdir())):
             problems.append(f"{rel}: code skill has no templates/")
@@ -54,13 +60,15 @@ def lint_rules(repo, problems):
     if not root.exists():
         return
     makefile = repo / "Makefile"
-    targets = set(re.findall(r"^([a-zA-Z0-9_-]+):", makefile.read_text(), re.M)) if makefile.exists() else set()
+    rules = MAKE_RULE.findall(makefile.read_text()) if makefile.exists() else []
+    targets = {t for line in rules for t in line.split()}
     for rule in sorted(root.glob("*.md")):
         text = rule.read_text()
         rel = rule.relative_to(repo)
         for p in BACKTICK_PATH.findall(text):
-            if p.startswith(("http", "~", "$")) or " " in p:
+            if p.startswith(("http", "~", "$")) or " " in p or NOT_A_PATH.search(p):
                 continue
+            p = re.sub(r":\d+(-\d+)?$", "", p)
             if not (repo / p).exists():
                 problems.append(f"{rel}: path {p} does not exist")
         for t in MAKE_TARGET.findall(text):
