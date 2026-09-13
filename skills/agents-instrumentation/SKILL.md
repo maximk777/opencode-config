@@ -10,7 +10,7 @@ Build and maintain project-specific rules, skills and agents. The global setup i
 
 Keep AGENTS.md a table of contents of about 100 lines.
 Content lives in .agents/rules, .agents/skills and .agents/agents; .opencode/agents and .opencode/skills are symlinks to them.
-Run templates/link-opencode.sh to move files out of .opencode and create the symlinks.
+Run ~/.config/opencode/skills/agents-instrumentation/templates/link-opencode.sh to move files out of .opencode and create the symlinks.
 Agent frontmatter in .agents/agents contains name, description and OpenCode fields only; never a tools list or a model alias.
 
 ## Audit

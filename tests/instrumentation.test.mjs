@@ -11,7 +11,7 @@ const ROOT = new URL("..", import.meta.url).pathname;
 checkSkill("agents-instrumentation", [
   "Keep AGENTS.md a table of contents of about 100 lines.",
   "Content lives in .agents/rules, .agents/skills and .agents/agents; .opencode/agents and .opencode/skills are symlinks to them.",
-  "Run templates/link-opencode.sh to move files out of .opencode and create the symlinks.",
+  "Run ~/.config/opencode/skills/agents-instrumentation/templates/link-opencode.sh to move files out of .opencode and create the symlinks.",
   "A skill about code must contain templates/ derived from real code of this repository, with source path and commit.",
   "Before creating a code skill, generate a sample from its templates in a temporary git worktree and build or test it; if it fails, do not create the skill.",
   "Run ~/.config/opencode/bin/agents-lint <repo> before presenting a diff.",
