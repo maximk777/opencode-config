@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+
+def read_state(root, slug, run_openspec=True):
+    ch = Path(root) / "openspec" / "changes" / slug
+    tasks = (ch / "tasks.md").read_text() if (ch / "tasks.md").exists() else ""
+    done = re.findall(r"^- \[x\] (\d+(?:\.\d+)*)", tasks, re.M)
+    open_ = re.findall(r"^- \[ \] (\d+(?:\.\d+)*)", tasks, re.M)
+    awaiting = []
+    for t in open_:
+        rep = ch / "reports" / f"{t}.md"
+        if rep.exists() and not re.search(r"^Verdict:", rep.read_text(), re.M):
+            awaiting.append(t)
+    wave = None
+    if (ch / "waves.md").exists():
+        for line in (ch / "waves.md").read_text().splitlines():
+            m = re.match(r"wave (\d+): (.*)", line)
+            if m and any(t in open_ for t in m.group(2).split()):
+                wave = int(m.group(1))
+                break
+    status = None
+    if run_openspec:
+        env = dict(os.environ, OPENSPEC_TELEMETRY="0")
+        r = subprocess.run(["openspec", "status", "--change", slug, "--json"], cwd=root, capture_output=True, text=True, env=env)
+        try:
+            status = json.loads(r.stdout)
+        except Exception:
+            status = {"error": (r.stderr or r.stdout).strip().split("\n")[0]}
+    return {
+        "slug": slug,
+        "tasks_total": len(done) + len(open_),
+        "tasks_done": done,
+        "tasks_open": open_,
+        "awaiting_review": awaiting,
+        "current_wave": wave,
+        "openspec_status": status,
+    }
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        sys.exit("usage: change-state <specs-root> <slug>")
+    print(json.dumps(read_state(sys.argv[1], sys.argv[2]), ensure_ascii=False, indent=2))
