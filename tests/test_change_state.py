@@ -19,7 +19,7 @@ class ChangeState(unittest.TestCase):
         (ch / "reports").mkdir(parents=True)
         (ch / "proposal.md").write_text("# Add ping\n\n## Why\nOperators need a liveness check before routing traffic.\n\n## What Changes\n- Add ping.\n")
         (ch / "tasks.md").write_text("## 1. Ping\n- [x] 1.1 Add handler\n- [ ] 1.2 Add test\n- [ ] 1.3 Add docs\n")
-        (ch / "reports" / "1.2.md").write_text("# Report 1.2\nStatus: DONE\n")
+        (ch / "reports" / "1.2.md").write_text("# Report 1.2\nStatus: DONE\nVerdict: DONE\n")
         (ch / "reports" / "1.3.md").write_text("# Report 1.3\nStatus: DONE\nVerdict: NOT COMPLIANT\n")
         (ch / "waves.md").write_text("wave 1: 1.1\nwave 2: 1.2 1.3\n")
         cls.state = S.read_state(cls.root, "add-ping")

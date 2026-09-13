@@ -79,8 +79,24 @@ class SmokeCheck(unittest.TestCase):
     def test_no_rejection(self):
         self.assertIn("SMOKE FAIL", self.check(rejections=0))
 
+    def test_fix_round_counts_as_caught_defect(self):
+        run = make_run(self.tmp, rejections=0)
+        with open(run / "events.log", "a") as f:
+            f.write('{"description":"Fix task 1.3 trimmed empty"}\n')
+        out = "\n".join(S.run_checks(run, run_go_test=False))
+        self.assertIn("fix rounds dispatched: 1", out)
+        self.assertIn("SMOKE PASS", out)
+
     def test_bad_commit_message(self):
         self.assertIn("SMOKE FAIL", self.check(bad_commit=True))
+
+    def test_archived_change_is_found(self):
+        run = make_run(self.tmp)
+        changes = run / "specs" / "openspec" / "changes"
+        (changes / "smoke-change").rename(changes / "archive" / "2026-09-13-smoke-change")
+        out = "\n".join(S.run_checks(run, run_go_test=False))
+        self.assertIn("tasks checked: 4/4", out)
+        self.assertIn("SMOKE PASS", out)
 
     def test_no_reset(self):
         self.assertIn("SMOKE FAIL", self.check(reset=False))

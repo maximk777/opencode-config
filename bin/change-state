@@ -15,7 +15,9 @@ def read_state(root, slug, run_openspec=True):
     awaiting = []
     for t in open_:
         rep = ch / "reports" / f"{t}.md"
-        if rep.exists() and not re.search(r"^Verdict:", rep.read_text(), re.M):
+        review = ch / "reports" / f"{t}.review.md"
+        texts = [p.read_text() for p in (rep, review) if p.exists()]
+        if rep.exists() and not any(re.search(r"^Verdict: (NOT )?COMPLIANT", x, re.M) for x in texts):
             awaiting.append(t)
     wave = None
     if (ch / "waves.md").exists():

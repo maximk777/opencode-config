@@ -25,7 +25,10 @@ def brief_files(change):
 def run_checks(run, run_go_test=True):
     run = Path(run)
     work = run / "work"
-    change = next(d for d in sorted((run / "specs" / "openspec" / "changes").iterdir()) if d.is_dir() and d.name != "archive")
+    changes = run / "specs" / "openspec" / "changes"
+    active = [d for d in sorted(changes.iterdir()) if d.is_dir() and d.name != "archive"]
+    archived = sorted(d for d in (changes / "archive").iterdir() if d.is_dir()) if (changes / "archive").exists() else []
+    change = (active or archived)[-1]
     lines, ok = [], True
 
     if git(work, "rev-parse", "HEAD") == (run / "HEAD.before").read_text().strip():
@@ -46,8 +49,11 @@ def run_checks(run, run_go_test=True):
     ok = ok and total > 0 and done == total
 
     rejected = sum(len(re.findall(r"^Verdict: NOT COMPLIANT", r.read_text(), re.M)) for r in (change / "reports").glob("*.md"))
+    events_text = (run / "events.log").read_text() if (run / "events.log").exists() else ""
+    fix_rounds = len(re.findall(r'"description":"Fix task', events_text))
     lines.append(f"reviewer rejected: {rejected}")
-    ok = ok and rejected >= 1
+    lines.append(f"fix rounds dispatched: {fix_rounds}")
+    ok = ok and (rejected >= 1 or fix_rounds >= 1)
 
     events = (run / "events.log").read_text() if (run / "events.log").exists() else ""
     reset_at = events.find("phase_reset")

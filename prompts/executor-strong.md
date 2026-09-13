@@ -20,6 +20,7 @@ Concerns: <text or none>
 
 ## Rules
 
+- Never write a Verdict line; only task-reviewer writes verdicts.
 - Touch only the files listed in the brief.
 - Do not commit.
 - Comment only non-obvious decisions.
