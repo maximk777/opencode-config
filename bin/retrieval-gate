@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+
+def parse_queries(text):
+    rows = []
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        query, _, expected = line.partition("\t")
+        rows.append((query.strip(), expected.strip()))
+    return rows
+
+
+def score(results, expected):
+    hits = 0
+    for query, fact in expected.items():
+        top3 = [str(r).lower() for r in results.get(query, [])[:3]]
+        if any(fact.lower() in r for r in top3):
+            hits += 1
+    return hits
+
+
+def verdict(openviking_hits, basic_memory_hits):
+    return "GATE PASS" if openviking_hits >= basic_memory_hits else "GATE FAIL"
+
+
+def openviking_top3(query):
+    out = subprocess.run(["docker", "exec", "openviking", "ov", "find", query, "--limit", "3"],
+                         capture_output=True, text=True).stdout
+    return re.findall(r"viking://\S+", out)[:3]
+
+
+def basic_memory_top3(query):
+    out = subprocess.run(["basic-memory", "tool", "search-notes", "--project", "memory", query],
+                         capture_output=True, text=True).stdout
+    return re.findall(r'"(?:permalink|title|file_path)":\s*"([^"]+)"', out)[:3]
+
+
+def main():
+    if len(sys.argv) != 2:
+        sys.exit("usage: retrieval-gate <queries.tsv>")
+    rows = parse_queries(Path(sys.argv[1]).read_text())
+    expected = {q: f for q, f in rows}
+    ov = score({q: openviking_top3(q) for q in expected}, expected)
+    bm = score({q: basic_memory_top3(q) for q in expected}, expected)
+    total = len(expected)
+    print(f"top3 openviking={ov}/{total}")
+    print(f"top3 basic-memory={bm}/{total}")
+    print(verdict(ov, bm))
+
+
+if __name__ == "__main__":
+    main()
