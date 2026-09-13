@@ -1,0 +1,5 @@
+{
+  "init": "Set up this workspace for me. My role is backend.",
+  "repos_add": "Add the repository {remote} to this workspace for the backend role. Summary: Payments worker.",
+  "work_record": "I finished task TASK-1. Record my work in the workspace."
+}

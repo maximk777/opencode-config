@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Runs the workspace tool tests on Python 3.9; the local interpreter is newer.
+set -euo pipefail
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+TESTS=(
+  tests/test_workspace_common.py
+  tests/test_workspace_gen_adapters.py
+  tests/test_workspace_gen_tables.py
+  tests/test_workspace_generate.py
+  tests/test_workspace_kit.py
+  tests/test_workspace_check_layout.py
+  tests/test_workspace_check_generated.py
+  tests/test_workspace_check_leaks.py
+  tests/test_workspace_check_keys.py
+  tests/test_workspace_check_records.py
+  tests/test_workspace_check_agents.py
+  tests/test_workspace_check.py
+  tests/test_workspace_recipes.py
+)
+docker run --rm \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -v "$REPO":/repo:ro \
+  -w /repo \
+  python:3.9 \
+  sh -c 'git config --global --add safe.directory "*" && python -m unittest "$@"' sh "${TESTS[@]}"

@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+"""Weak-model acceptance smoke for the workspace kit: fixtures, a Python-free OpenCode run, and a verdict."""
+import argparse
+import datetime
+import json
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+FIXTURES = REPO / "smoke/workspace"
+RESULTS = REPO / "smoke/WORKSPACE-RESULTS.md"
+IDENTITY = ["-c", "user.name=smoke", "-c", "user.email=smoke@example.com"]
+SHIM_NAMES = ["python", "python3"] + [f"python3.{minor}" for minor in range(9, 15)]
+
+
+def run(cmd, cwd=None, env=None, check=True):
+    result = subprocess.run(cmd, cwd=str(cwd) if cwd else None, env=env, capture_output=True, text=True)
+    if check and result.returncode != 0:
+        sys.stderr.write(result.stdout)
+        sys.stderr.write(result.stderr)
+        print(f"workspace-smoke: {' '.join(map(str, cmd))} exited {result.returncode}", file=sys.stderr)
+        sys.exit(2)
+    return result
+
+
+def git(cwd, *args, commit=False):
+    return run(["git"] + (IDENTITY if commit else []) + list(args), cwd=cwd)
+
+
+def bare(path):
+    path.mkdir(parents=True)
+    git(path, "init", "-q", "--bare")
+    git(path, "symbolic-ref", "HEAD", "refs/heads/main")
+
+
+def fixtures(run_dir):
+    src = run_dir / "src"
+    remotes = run_dir / "remotes"
+    bff = src / "demo-bff"
+    bff.mkdir(parents=True)
+    git(bff, "init", "-q", "-b", "main")
+    (bff / "README.md").write_text("# demo-bff\n", encoding="utf-8")
+    git(bff, "add", "-A")
+    git(bff, "commit", "-q", "-m", "chore: init", commit=True)
+    git(bff, "checkout", "-q", "-b", "TASK-1-demo")
+    (bff / "items.txt").write_text("GET /items\n", encoding="utf-8")
+    git(bff, "add", "-A")
+    git(bff, "commit", "-q", "-m", "TASK-1 add items endpoint", commit=True)
+    sha = git(bff, "rev-parse", "HEAD").stdout.strip()
+    bare(remotes / "demo-bff.git")
+    git(bff, "push", "-q", str(remotes / "demo-bff.git"), "main", "TASK-1-demo")
+
+    worker = src / "payments-worker"
+    worker.mkdir(parents=True)
+    git(worker, "init", "-q", "-b", "main")
+    (worker / "README.md").write_text("# payments-worker\n", encoding="utf-8")
+    git(worker, "add", "-A")
+    git(worker, "commit", "-q", "-m", "chore: init", commit=True)
+    bare(remotes / "payments-worker.git")
+    git(worker, "push", "-q", str(remotes / "payments-worker.git"), "main")
+
+    bare(remotes / "workspace.git")
+    print(f"FIXTURES OK {sha}")
+    return sha
+
+
+def shim(run_dir):
+    directory = run_dir / "shim"
+    directory.mkdir()
+    for name in SHIM_NAMES:
+        path = directory / name
+        path.write_text("#!/bin/sh\necho 'python: command not found' >&2\nexit 127\n", encoding="utf-8")
+        path.chmod(0o755)
+    env = dict(os.environ, PATH=f"{directory}:{os.environ.get('PATH', '')}")
+    code = run(["env", f"PATH={env['PATH']}", "sh", "-c", "python3 --version"], check=False).returncode
+    if code != 127:
+        print(f"workspace-smoke: shim python3 exited {code}, expected 127", file=sys.stderr)
+        sys.exit(2)
+    print("SHIM OK")
+    return directory
+
+
+def workspace(run_dir):
+    owner = run_dir / "owner"
+    run([
+        str(REPO / "bin/workspace-kit"), "create", str(owner),
+        "--param", "workspace_name=smoke",
+        "--param", "title=Smoke workspace",
+        "--param", "forge=git",
+        "--param", "id_pattern=TASK-\\d+",
+        "--param", "tracker_url=https://tracker.example/i/{id}",
+    ])
+    manifest_path = owner / "repos.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["repositories"].append({
+        "name": "demo-bff",
+        "remote": f"file://{run_dir / 'remotes/demo-bff.git'}",
+        "forge": "git",
+        "default_branch": "main",
+        "roles": ["backend"],
+        "summary": "Demo BFF",
+    })
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    run([sys.executable, "tools/generate.py"], cwd=owner)
+    git(owner, "init", "-q", "-b", "main")
+    git(owner, "add", "-A")
+    git(owner, "commit", "-q", "-m", "chore: create workspace", commit=True)
+    git(owner, "remote", "add", "origin", str(run_dir / "remotes/workspace.git"))
+    git(owner, "push", "-q", "origin", "main")
+    git(run_dir / "remotes/workspace.git", "symbolic-ref", "HEAD", "refs/heads/main")
+    print("WORKSPACE OK")
+
+
+def clone_and_check(run_dir, name, branch=None):
+    """Clone the workspace remote and run check with the real interpreter; return (exit code, output, clone)."""
+    target = run_dir / name
+    cmd = ["git", "clone", "-q"] + (["-b", branch] if branch else []) + [str(run_dir / "remotes/workspace.git"), str(target)]
+    cloned = run(cmd, check=False)
+    if cloned.returncode != 0:
+        return cloned.returncode, (cloned.stdout + cloned.stderr).strip(), None
+    result = run([sys.executable, "tools/check.py"], cwd=target, check=False)
+    return result.returncode, (result.stdout + result.stderr).strip(), target
+
+
+def write_config(run_dir, model):
+    source = json.loads((REPO / "opencode.json").read_text(encoding="utf-8"))
+    config = {
+        "$schema": "https://opencode.ai/config.json",
+        "model": model,
+        "provider": source["provider"],
+        "permission": {
+            # Deny Python invocations but allow the probes skills use to pick their no-Python path;
+            # OpenCode applies the last matching rule, so the allows must follow the denies.
+            "bash": {
+                "*": "allow",
+                "python*": "deny",
+                "* python*": "deny",
+                "*/python*": "deny",
+                "command -v python*": "allow",
+                "which python*": "allow",
+            },
+            "edit": "allow",
+            "webfetch": "deny",
+            "external_directory": "deny",
+        },
+        "autoupdate": False,
+        "share": "disabled",
+    }
+    directory = run_dir / "config"
+    directory.mkdir()
+    (directory / "opencode.json").write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print("CONFIG OK")
+    return directory
+
+
+def dotenv(path):
+    """Parse KEY=VALUE lines silently; names and values are never printed."""
+    values = {}
+    if not path.is_file():
+        return values
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if key:
+            values[key] = value
+    return values
+
+
+def opencode_env(run_dir, shim_dir, config_dir, directory):
+    """Build the child environment for `opencode run` in directory."""
+    xdg = run_dir / "xdg"
+    xdg.mkdir(exist_ok=True)
+    # Like bin/smoke-run, variables already exported by the caller win over the .env file.
+    env = dict(dotenv(Path.home() / ".openviking/.env"))
+    env.update(os.environ)
+    # XDG_CONFIG_HOME keeps the global ~/.config/opencode from loading; XDG_DATA_HOME stays so provider logins remain.
+    # subprocess cwd does not update PWD, and opencode takes its session directory from PWD.
+    env.update(
+        PATH=f"{shim_dir}:{os.environ.get('PATH', '')}",
+        OPENCODE_CONFIG_DIR=str(config_dir),
+        XDG_CONFIG_HOME=str(xdg),
+        PWD=str(directory),
+    )
+    return env
+
+
+def session_directory(events):
+    """Return the directory of the session in an events file, taken from the opencode log; None when unknown."""
+    try:
+        with open(events, encoding="utf-8") as handle:
+            session = json.loads(handle.readline()).get("sessionID")
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not session:
+        return None
+    data = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+    log = data / "opencode/log/opencode.log"
+    if not log.is_file():
+        return None
+    marker = f"message=created id={session} "
+    found = None
+    with open(log, encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if marker in line:
+                match = re.search(r'\bdirectory=("(?:[^"\\]|\\.)*"|\S+)', line)
+                if match:
+                    value = match.group(1)
+                    found = json.loads(value) if value.startswith('"') else value
+    return found
+
+
+def prompts(run_dir, person, shim_dir, config_dir, model, timeout, failures):
+    texts = json.loads((FIXTURES / "prompts.json").read_text(encoding="utf-8"))
+    env = opencode_env(run_dir, shim_dir, config_dir, person)
+    remote = f"file://{run_dir / 'remotes/payments-worker.git'}"
+    for n, key in enumerate(["init", "repos_add", "work_record"], start=1):
+        prompt = texts[key].replace("{remote}", remote)
+        cmd = ["opencode", "run", "--agent", "build", "--model", model, "--format", "json", "--dir", str(person), prompt]
+        events = run_dir / f"events-{n}.jsonl"
+        with open(events, "w", encoding="utf-8") as out, \
+                open(run_dir / f"stderr-{n}.log", "w", encoding="utf-8") as err:
+            try:
+                code = subprocess.run(cmd, cwd=str(person), env=env, stdout=out, stderr=err, timeout=timeout).returncode
+            except subprocess.TimeoutExpired:
+                code = None
+        status = "timeout" if code is None else f"exit {code}"
+        print(f"PROMPT {key} {status}")
+        if code is None:
+            failures.append(f"prompt {key} timed out after {timeout} s")
+        elif code != 0:
+            failures.append(f"prompt {key} exited {code}, stderr: {run_dir / f'stderr-{n}.log'}")
+        directory = session_directory(events)
+        if directory is None or Path(directory).resolve() != person.resolve():
+            failures.append(f"prompt {key} ran in {directory or 'unknown'}, expected {person}")
+            print(f"PROMPT {key} directory mismatch, skipping the remaining prompts")
+            break
+        if key == "init":
+            drafts = person / ".local/drafts"
+            drafts.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(str(FIXTURES / "draft-TASK-1.md"), str(drafts / "TASK-1.md"))
+
+
+def verify(run_dir, person, sha, failures, outputs):
+    env_file = person / ".local/env"
+    if not env_file.is_file():
+        failures.append(".local/env is missing")
+    elif stat.S_IMODE(env_file.stat().st_mode) != 0o600:
+        failures.append(f".local/env has mode {oct(stat.S_IMODE(env_file.stat().st_mode))}, expected 0o600")
+    if not (person / "repos/demo-bff/.git").exists():
+        failures.append("repos/demo-bff is not cloned")
+    refs = run(["git", "ls-remote", str(run_dir / "remotes/workspace.git")], check=False).stdout
+    branches = ["repos-add-payments-worker", "work/TASK-1"]
+    for n, branch in enumerate(branches, start=1):
+        if f"refs/heads/{branch}" not in refs.split():
+            failures.append(f"branch {branch} was not pushed")
+            continue
+        code, output, clone = clone_and_check(run_dir, f"verify-{n}", branch)
+        if output:
+            outputs.append((f"check on {branch}", output))
+        if code != 0:
+            failures.append(f"check on {branch} exited {code}")
+        if branch == "work/TASK-1" and clone is not None:
+            record = clone / "work/TASK-1/record.md"
+            text = record.read_text(encoding="utf-8") if record.is_file() else None
+            if text is None:
+                failures.append("work/TASK-1/record.md is missing")
+            elif sha not in text:
+                failures.append(f"work/TASK-1/record.md does not contain the fixture commit {sha}")
+
+
+def append_result(model, failures, outputs):
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    verdict = "FAIL" if failures else "PASS"
+    lines = ["", f"## {stamp} {model} {verdict}"]
+    lines += [f"- {failure}" for failure in failures]
+    for title, output in outputs:
+        lines += ["", f"{title}:", "```", output, "```"]
+    with open(RESULTS, "a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+    return verdict
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="workspace-smoke")
+    parser.add_argument("--model", default="zai-coding-plan/glm-5.3-flash")
+    parser.add_argument("--run-dir", default="/tmp/workspace-smoke")
+    parser.add_argument("--setup-only", action="store_true")
+    parser.add_argument("--timeout", type=int, default=900, help="seconds per prompt")
+    args = parser.parse_args()
+
+    run_dir = Path(args.run_dir).resolve()
+    shutil.rmtree(str(run_dir), ignore_errors=True)
+    run_dir.mkdir(parents=True)
+
+    sha = fixtures(run_dir)
+    shim_dir = shim(run_dir)
+    workspace(run_dir)
+
+    failures, outputs = [], []
+    code, output, _ = clone_and_check(run_dir, "verify-main")
+    if code == 0:
+        print("SETUP PASS")
+    else:
+        print(f"SETUP FAIL check exited {code}")
+        print(output)
+        if args.setup_only:
+            return 1
+        failures.append(f"check on a fresh clone of main exited {code}")
+        outputs.append(("check on main", output))
+        append_result(args.model, failures, outputs)
+        print("WORKSPACE SMOKE FAIL")
+        return 1
+    if args.setup_only:
+        return 0
+
+    person = run_dir / "person"
+    run(["git", "clone", "-q", str(run_dir / "remotes/workspace.git"), str(person)])
+    git(person, "config", "user.name", "smoke")
+    git(person, "config", "user.email", "smoke@example.com")
+
+    config_dir = write_config(run_dir, args.model)
+    prompts(run_dir, person, shim_dir, config_dir, args.model, args.timeout, failures)
+    verify(run_dir, person, sha, failures, outputs)
+
+    verdict = append_result(args.model, failures, outputs)
+    print(f"WORKSPACE SMOKE {verdict}")
+    return 0 if verdict == "PASS" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
