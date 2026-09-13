@@ -45,7 +45,12 @@ export const SessionReset = async ({ client, $ }) => {
     const changeState = new URL("../bin/change-state", import.meta.url).pathname;
     try {
       return JSON.parse(await $`${changeState} ${home}/specs/${project} ${slug}`.quiet().text());
-    } catch {
+    } catch (err) {
+      // Only the exit code or error class is logged: change-state stderr is not guaranteed to be free of secrets.
+      const reason = err?.exitCode != null ? `exit ${err.exitCode}` : (err?.name ?? "error");
+      await client.app
+        ?.log?.({ body: { service: "session-reset", level: "warn", message: `change-state failed for ${ref}: ${reason}` } })
+        ?.catch?.(() => {});
       return null;
     }
   };
