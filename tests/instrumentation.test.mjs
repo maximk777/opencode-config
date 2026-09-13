@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { checkSkill } from "./lib/skill.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -21,7 +24,51 @@ checkSkill("agents-instrumentation", [
 const tpl = (n) => readFileSync(`${ROOT}skills/agents-instrumentation/templates/${n}`, "utf8");
 
 test("skill template has a templates section", () => assert.ok(tpl("skill/SKILL.md").includes("## Templates")));
-test("link script creates symlinks into .agents", () => assert.ok(tpl("link-opencode.sh").includes("ln -s ../.agents/")));
+test("link script creates symlinks into .agents", () => assert.ok(tpl("link-opencode.sh").includes('ln -s "../.agents/')));
+
+const linkScript = `${ROOT}skills/agents-instrumentation/templates/link-opencode.sh`;
+const runLink = (cwd) => spawnSync("bash", [linkScript], { cwd, encoding: "utf8" });
+const scratch = () => mkdtempSync(join(tmpdir(), "link-opencode-"));
+
+test("link script moves .opencode contents and is idempotent", () => {
+  const dir = scratch();
+  mkdirSync(join(dir, ".opencode/agents"), { recursive: true });
+  writeFileSync(join(dir, ".opencode/agents/helper.md"), "helper");
+  assert.equal(runLink(dir).status, 0);
+  assert.equal(readlinkSync(join(dir, ".opencode/agents")), "../.agents/agents");
+  assert.equal(readlinkSync(join(dir, ".opencode/skills")), "../.agents/skills");
+  assert.equal(readFileSync(join(dir, ".agents/agents/helper.md"), "utf8"), "helper");
+  assert.equal(runLink(dir).status, 0);
+});
+
+test("link script refuses to overwrite an existing .agents file", () => {
+  const dir = scratch();
+  mkdirSync(join(dir, ".opencode/agents"), { recursive: true });
+  mkdirSync(join(dir, ".agents/agents"), { recursive: true });
+  writeFileSync(join(dir, ".opencode/agents/helper.md"), "old");
+  writeFileSync(join(dir, ".agents/agents/helper.md"), "kept");
+  const r = runLink(dir);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /refusing/);
+  assert.equal(readFileSync(join(dir, ".agents/agents/helper.md"), "utf8"), "kept");
+  assert.equal(readFileSync(join(dir, ".opencode/agents/helper.md"), "utf8"), "old");
+  assert.equal(existsSync(join(dir, ".opencode/skills")), false);
+});
+
+test("link script refuses a foreign symlink or a file in place of the link", () => {
+  const linked = scratch();
+  mkdirSync(join(linked, ".opencode"), { recursive: true });
+  symlinkSync("/tmp", join(linked, ".opencode/skills"));
+  const r1 = runLink(linked);
+  assert.notEqual(r1.status, 0);
+  assert.equal(readlinkSync(join(linked, ".opencode/skills")), "/tmp");
+  const file = scratch();
+  mkdirSync(join(file, ".opencode"), { recursive: true });
+  writeFileSync(join(file, ".opencode/agents"), "not a dir");
+  const r2 = runLink(file);
+  assert.notEqual(r2.status, 0);
+  assert.equal(readFileSync(join(file, ".opencode/agents"), "utf8"), "not a dir");
+});
 
 test("instrumentation agent edits only project instrumentation and cannot commit", () => {
   const a = JSON.parse(readFileSync(`${ROOT}opencode.json`, "utf8")).agent.instrumentation;
