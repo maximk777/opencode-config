@@ -14,7 +14,7 @@ def git(cwd, *args):
     subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
 
 
-def make_run(tmp, *, move_head=False, stray=False, checked=4, rejections=1, bad_commit=False, reset=True):
+def make_run(tmp, *, move_head=False, stray=False, checked=4, rejections=1, bad_commit=False, reset=True, specs_commit=True):
     run = Path(tmp)
     work, ch = run / "work", run / "specs" / "openspec" / "changes" / "smoke-change"
     (work / "pkg").mkdir(parents=True)
@@ -41,7 +41,13 @@ def make_run(tmp, *, move_head=False, stray=False, checked=4, rejections=1, bad_
     for i in range(rejections):
         (ch / "reports" / f"1.{i + 1}.md").write_text("Status: DONE\nVerdict: NOT COMPLIANT\nVerdict: COMPLIANT\n")
     (run / "events.log").write_text('{"tool":"phase_reset"}\n{"tool":"task"}\n' if reset else '{"tool":"task"}\n')
-    (run / "proposed-commits.txt").write_text("Added stuff\n" if bad_commit else "feat(pkg): add a\n")
+    (run / "specs" / "proposed-commits.txt").write_text("Added stuff\n" if bad_commit else "feat(pkg): add a\n")
+    specs = run / "specs"
+    git(specs, "init", "-q")
+    for msg in ["docs(smoke): approved change", "docs(smoke): archive change"][: 2 if specs_commit else 1]:
+        (specs / "log.txt").write_text(msg)
+        git(specs, "add", "-A")
+        git(specs, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", msg)
     return run
 
 
@@ -79,13 +85,18 @@ class SmokeCheck(unittest.TestCase):
     def test_no_rejection(self):
         self.assertIn("SMOKE FAIL", self.check(rejections=0))
 
-    def test_fix_round_counts_as_caught_defect(self):
+    def test_specs_not_committed(self):
+        out = self.check(specs_commit=False)
+        self.assertIn("specs commits: 1", out)
+        self.assertIn("SMOKE FAIL", out)
+
+    def test_fix_round_without_reviewer_rejection_fails(self):
         run = make_run(self.tmp, rejections=0)
         with open(run / "events.log", "a") as f:
             f.write('{"description":"Fix task 1.3 trimmed empty"}\n')
         out = "\n".join(S.run_checks(run, run_go_test=False))
         self.assertIn("fix rounds dispatched: 1", out)
-        self.assertIn("SMOKE PASS", out)
+        self.assertIn("SMOKE FAIL", out)
 
     def test_bad_commit_message(self):
         self.assertIn("SMOKE FAIL", self.check(bad_commit=True))

@@ -3,3 +3,4 @@
 - [ ] 1.2 Sum of empty slice
 - [ ] 1.3 Greet world for empty name
 - [ ] 1.4 Add Max
+- [ ] 1.5 Clamp rejects an inverted range

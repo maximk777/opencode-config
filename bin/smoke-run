@@ -11,12 +11,19 @@ rm -rf "$RUN" && mkdir -p "$RUN"
 cp -R "$REPO/smoke/fixture" "$RUN/work"
 (cd "$RUN/work" && git init -q && git add -A && git -c user.email=smoke@local -c user.name=smoke commit -qm "chore(smoke): init")
 git -C "$RUN/work" rev-parse HEAD > "$RUN/HEAD.before"
+# Task 1.5 arrives already implemented without one scenario, as if submitted before the session.
+cp -R "$REPO/smoke/pending/." "$RUN/work/"
+(cd "$RUN/work" && git add -N internal/clampx)
 cp -R "$REPO/smoke/specs" "$RUN/specs"
 (cd "$RUN/specs" && git init -q && git add -A && git -c user.email=smoke@local -c user.name=smoke commit -qm "docs(smoke): approved change")
 mkdir -p "$HOME/specs"
 ln -sfn "$RUN/specs" "$HOME/specs/opencode-smoke"
+trap 'rm -f "$HOME/specs/opencode-smoke"' EXIT
 
-set -a; [ -f "$HOME/.openviking/.env" ] && . "$HOME/.openviking/.env"; set +a
+# Only the keys the config references; the root key stays in the file.
+for k in OPENVIKING_API_KEY DEEPSEEK_API_KEY; do
+  [[ -n "${!k:-}" ]] || export "$k=$(grep -E "^$k=" "$HOME/.openviking/.env" 2>/dev/null | head -1 | cut -d= -f2- | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//')"
+done
 CFG="${OPENCODE_CONFIG_DIR:-$REPO}"
 TASKS="$RUN/specs/openspec/changes/smoke-change/tasks.md"
 START=$(date +%s)
@@ -24,17 +31,17 @@ cd "$RUN/work"
 
 OPENCODE_CONFIG_DIR="$CFG" opencode run --agent orchestrator --format json \
   --title "[change:opencode-smoke/smoke-change]" \
-  "The spec and the plan for change smoke-change in project opencode-smoke are already approved. Execute it now with the change-execute skill without asking questions. The specs root is ~/specs/opencode-smoke. When all tasks are accepted, write the proposed commit messages, one per line, to $RUN/proposed-commits.txt." \
+  "The spec and the plan for change smoke-change in project opencode-smoke are already approved. Execute it now with the change-execute skill without asking questions. The specs root is ~/specs/opencode-smoke. When all tasks are accepted, write the proposed commit messages, one per line, to ~/specs/opencode-smoke/proposed-commits.txt." \
   >> "$RUN/events.log" 2>> "$RUN/stderr.log"
 SID=$(grep -o '"sessionID":"[^"]*"' "$RUN/events.log" | head -1 | cut -d'"' -f4)
 
 TURN=1
 ARCHIVE="$RUN/specs/openspec/changes/archive"
-while grep -q '^- \[ \]' "$TASKS" || [[ ! -s "$RUN/proposed-commits.txt" ]] || [[ -z "$(ls -A "$ARCHIVE" 2>/dev/null)" ]]; do
+while grep -q '^- \[ \]' "$TASKS" || [[ ! -s "$RUN/specs/proposed-commits.txt" ]] || [[ -z "$(ls -A "$ARCHIVE" 2>/dev/null)" ]]; do
   [[ $TURN -ge $MAX_TURNS ]] && break
   TURN=$((TURN + 1))
   OPENCODE_CONFIG_DIR="$CFG" opencode run --agent orchestrator --format json --session "$SID" \
-    "Continue the change smoke-change from its files. Do not ask questions. When all tasks are accepted, write the proposed commit messages, one per line, to $RUN/proposed-commits.txt." \
+    "Continue the change smoke-change from its files. Do not ask questions. When all tasks are accepted, write the proposed commit messages, one per line, to ~/specs/opencode-smoke/proposed-commits.txt." \
     >> "$RUN/events.log" 2>> "$RUN/stderr.log"
 done
 END=$(date +%s)

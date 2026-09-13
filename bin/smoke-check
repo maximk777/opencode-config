@@ -53,7 +53,7 @@ def run_checks(run, run_go_test=True):
     fix_rounds = len(re.findall(r'"description":"Fix task', events_text))
     lines.append(f"reviewer rejected: {rejected}")
     lines.append(f"fix rounds dispatched: {fix_rounds}")
-    ok = ok and (rejected >= 1 or fix_rounds >= 1)
+    ok = ok and rejected >= 1
 
     events = (run / "events.log").read_text() if (run / "events.log").exists() else ""
     reset_at = events.find("phase_reset")
@@ -62,7 +62,13 @@ def run_checks(run, run_go_test=True):
     else:
         lines.append("no reset observed"); ok = False
 
-    commits = [c for c in (run / "proposed-commits.txt").read_text().splitlines() if c.strip()] if (run / "proposed-commits.txt").exists() else []
+    specs_commits = git(run / "specs", "rev-list", "--count", "HEAD")
+    specs_commits = int(specs_commits) if specs_commits.isdigit() else 0
+    lines.append(f"specs commits: {specs_commits}")
+    ok = ok and specs_commits >= 2
+
+    proposed = next((p for p in (run / "specs" / "proposed-commits.txt", run / "proposed-commits.txt") if p.exists()), None)
+    commits = [c for c in proposed.read_text().splitlines() if c.strip()] if proposed else []
     bad = [c for c in commits if CCM.check(c)]
     if commits and not bad:
         lines.append("commits proposed ok")
