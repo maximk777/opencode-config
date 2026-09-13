@@ -3,8 +3,9 @@
   "storage": { "workspace": "/app/.openviking/data" },
   "embedding": {
     "dense": {
-      "provider": "ollama",
-      "api_base": "http://host.docker.internal:11434",
+      "provider": "openai",
+      "api_base": "http://host.docker.internal:11434/v1",
+      "api_key": "ollama",
       "model": "bge-m3",
       "dimension": 1024
     }
