@@ -409,6 +409,20 @@ Tier-файлы — единственное место назначения м�
 | LLM OpenViking: CoreLLM / z.ai API / OpenAI | выбран собственный ключ DeepSeek |
 | Ключ подписки z.ai в OpenViking | запрещено условиями Coding Plan |
 
+## 13a. Что выяснилось при сборке (2026-09-13)
+
+- **Права оркестратора (S1).** `edit: {"*": "deny", "*specs/*": "allow"}` при глобальном `external_directory: allow`. Путь в правиле считается относительно рабочей репы, и `*` проходит через `/`, поэтому `../../specs/...` разрешён, а файлы внутри репы нет.
+- **Глобальные разрешения.** `read`, `glob`, `grep`, `list`, `webfetch`, `websearch`, `external_directory` = `allow`: агенты читают любые папки и ходят в интернет без вопросов. Правки и bash остаются под правилами агентов.
+- **Волны (S2).** GLM-5.3 отправляет несколько вызовов `task` в одном сообщении, субагенты работают параллельно.
+- **Проектные агенты и скиллы (S5).** Работают через закоммиченные симлинки `.opencode/agents` и `.opencode/skills`; скиллы также находятся нативно в `.agents/skills`. Временные папки в `/var` ломают поиск проекта (`/private/var`), тестировать только под `$HOME`.
+- **OpenViking.**
+  - Эмбеддинги Ollama подключаются как OpenAI-совместимый провайдер: `"provider": "openai", "api_base": "http://host.docker.internal:11434/v1"`. Провайдер `ollama` бьёт в `/embeddings` и получает 404.
+  - Корневой ключ не читает и не пишет данные. Создан аккаунт `maxim` (`ov admin create-account maxim --admin maxim --sudo`), пользовательский ключ лежит в `~/.openviking/.env` как `OPENVIKING_API_KEY`; его же использует MCP в `opencode.json`.
+  - `ov` CLI в контейнере требует `ov language en` и конфиг `ov config add custom --name user --url http://127.0.0.1:1933 --api-key-stdin --activate`.
+  - Повторный `ov add-resource ... --to <тот же uri>` переиндексирует без ошибок, поэтому `bin/ov-sync` — одна команда.
+- **Serena** удалена из живого конфига по просьбе.
+- **Проверка модели агента:** `bin/oc-agent <agent>`.
+
 ## 14. Источники
 
 - OpenCode: https://opencode.ai/docs (agents, config, providers, skills, permissions, server); исходники тега v1.18.30.
