@@ -25,7 +25,7 @@ def brief_files(change):
 def run_checks(run, run_go_test=True):
     run = Path(run)
     work = run / "work"
-    change = next((run / "specs" / "openspec" / "changes").iterdir())
+    change = next(d for d in sorted((run / "specs" / "openspec" / "changes").iterdir()) if d.is_dir() and d.name != "archive")
     lines, ok = [], True
 
     if git(work, "rev-parse", "HEAD") == (run / "HEAD.before").read_text().strip():

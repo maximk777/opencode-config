@@ -20,6 +20,7 @@ def make_run(tmp, *, move_head=False, stray=False, checked=4, rejections=1, bad_
     (work / "pkg").mkdir(parents=True)
     (ch / "briefs").mkdir(parents=True)
     (ch / "reports").mkdir()
+    (run / "specs" / "openspec" / "changes" / "archive").mkdir()
     (work / "go.mod").write_text("module smokeapp\n\ngo 1.24\n")
     (work / "pkg" / "a.go").write_text("package pkg\n")
     git(work, "init", "-q")
