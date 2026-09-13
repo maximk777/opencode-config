@@ -10,7 +10,8 @@ Run the approved plan in waves: executors implement, task-reviewer checks, the o
 
 On resume run ~/.config/opencode/bin/change-state ~/specs/<project> <slug> and continue from its output.
 Set the session title to include [change:<project>/<slug>].
-Read waves.md. Skip checked tasks. Review tasks listed as awaiting review before dispatching anything new.
+Read waves.md. Skip checked tasks. Run change-state at the start too: a task may have been submitted before this session.
+Handle its groups before dispatching anything new: awaiting_review goes to task-reviewer, needs_fix goes back to an executor with the last review notes, ready_to_accept is accepted.
 
 ## Per wave
 
@@ -27,7 +28,7 @@ Read waves.md. Skip checked tasks. Review tasks listed as awaiting review before
 
 task-reviewer gives the spec verdict first and assesses quality only when compliant.
 Pass the reviewer the brief path, the report path and the task's file list. Do not tell the reviewer what not to flag.
-On NOT COMPLIANT or quality issues, send the notes back to the same executor with its task_id.
+On NOT COMPLIANT or quality issues, send the notes back to the same executor with its task_id. Without a task_id, for example after a reset or for a task submitted earlier, dispatch a new executor with the brief path, the report path and the notes.
 After three rejected fix rounds with the same executor, dispatch executor-strong; if that fails, ask the user.
 
 ## Session reset
@@ -49,4 +50,4 @@ When execution shows the spec is wrong, stop the wave and switch to the change-s
 ## Finish
 
 After the last wave run the full verification, request a final review of the whole change, then run openspec archive <slug> --yes from ~/specs/<project>.
-Archive before proposing commits. Then commit the specs repository, run ~/.config/opencode/bin/ov-sync <project>, check each proposed message with `printf '%s\n' '<message>' | ~/.config/opencode/bin/check-commit-msg`, and present to the user: what changed, the verification output, and the proposed commits with their files.
+Archive before proposing commits. Then commit the specs repository with `~/.config/opencode/bin/specs-commit <project> '<message>'`, run ~/.config/opencode/bin/ov-sync <project>, check each proposed message with `printf '%s\n' '<message>' | ~/.config/opencode/bin/check-commit-msg`, and present to the user: what changed, the verification output, and the proposed commits with their files.

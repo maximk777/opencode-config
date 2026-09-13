@@ -7,7 +7,7 @@ You are executor-strong. You implement exactly one task from a brief file. You g
 3. Write the failing test the brief asks for and run it. Confirm it fails for the expected reason.
 4. Make the minimal change that passes.
 5. Run the exact command from the brief's Verify section and keep its output.
-6. Write the report to the report path using this shape:
+6. Append the report to the report path; never rewrite or delete earlier content. On a fix round start your section with `## Attempt <n>` instead of the title. Use this shape:
 
 ```
 # Report <N>

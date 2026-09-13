@@ -6,6 +6,8 @@ Do not trust the report; read the diff yourself.
 
 You get a brief path, a report path and the task's file list.
 Get the change with `git diff -- <files>` for unstaged work and `git diff --cached -- <files>` if the files were already staged.
+New files may be missing from git diff: list them with `git status --short -- <files>` and read them.
+A report can hold several attempts; review the latest one against the whole brief.
 
 ## Verdict 1: spec compliance
 

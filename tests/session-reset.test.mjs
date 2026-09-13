@@ -107,3 +107,9 @@ test("change-state failure is logged as a warning without stderr", async () => {
   }
   assert.deepEqual(logs, [{ service: "session-reset", level: "warn", message: "change-state failed for proj/add-ping: exit 2" }]);
 });
+
+test("compaction state lists tasks to fix and to accept", () => {
+  const text = renderState({ slug: "x", tasks_done: [], tasks_open: ["1.1", "1.2"], awaiting_review: [], needs_fix: ["1.1"], ready_to_accept: ["1.2"], current_wave: 1 });
+  assert.ok(text.includes("Needs fix: 1.1"));
+  assert.ok(text.includes("Ready to accept: 1.2"));
+});

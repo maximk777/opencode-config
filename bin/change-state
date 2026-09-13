@@ -7,18 +7,31 @@ import sys
 from pathlib import Path
 
 
+VERDICT = re.compile(r"^Verdict: (NOT )?COMPLIANT\s*$", re.M)
+ATTEMPT = re.compile(r"^(# Report\b|## Attempt\b)", re.M)
+
+
+def review_status(text):
+    """Classifies one append-only report by its last verdict and the last executor attempt after it."""
+    verdicts = list(VERDICT.finditer(text))
+    if not verdicts:
+        return "awaiting_review"
+    last = verdicts[-1]
+    if any(m.start() > last.start() for m in ATTEMPT.finditer(text)):
+        return "awaiting_review"
+    return "needs_fix" if last.group(1) else "ready_to_accept"
+
+
 def read_state(root, slug, run_openspec=True):
     ch = Path(root) / "openspec" / "changes" / slug
     tasks = (ch / "tasks.md").read_text() if (ch / "tasks.md").exists() else ""
     done = re.findall(r"^- \[x\] (\d+(?:\.\d+)*)", tasks, re.M)
     open_ = re.findall(r"^- \[ \] (\d+(?:\.\d+)*)", tasks, re.M)
-    awaiting = []
+    groups = {"awaiting_review": [], "needs_fix": [], "ready_to_accept": []}
     for t in open_:
         rep = ch / "reports" / f"{t}.md"
-        review = ch / "reports" / f"{t}.review.md"
-        texts = [p.read_text() for p in (rep, review) if p.exists()]
-        if rep.exists() and not any(re.search(r"^Verdict: (NOT )?COMPLIANT", x, re.M) for x in texts):
-            awaiting.append(t)
+        if rep.exists():
+            groups[review_status(rep.read_text())].append(t)
     wave = None
     if (ch / "waves.md").exists():
         for line in (ch / "waves.md").read_text().splitlines():
@@ -39,7 +52,7 @@ def read_state(root, slug, run_openspec=True):
         "tasks_total": len(done) + len(open_),
         "tasks_done": done,
         "tasks_open": open_,
-        "awaiting_review": awaiting,
+        **groups,
         "current_wave": wave,
         "openspec_status": status,
     }
