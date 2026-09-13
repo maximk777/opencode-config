@@ -6,7 +6,7 @@ M = importlib.machinery.SourceFileLoader("memory_export", "bin/memory-export").l
 
 class MemoryExport(unittest.TestCase):
     def test_flags_jwt(self):
-        self.assertTrue(M.find_secrets("token eyJhbGciOiJIUzI1NiIs.eyJpc3MiOiJGSDR2Q2pi.sig"))
+        self.assertTrue(M.find_secrets("token eyJfakeheaderAAAA.eyJfakepayloadBBBB.sig"))
 
     def test_flags_bearer(self):
         self.assertTrue(M.find_secrets("Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123"))
