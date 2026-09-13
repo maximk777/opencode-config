@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Runs the approved smoke change through the orchestrator on a throwaway copy of the fixture.
+# The orchestrator ends its turn at every phase_reset, so the session is continued until all tasks are checked.
+set -uo pipefail
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+RUN=/tmp/opencode-smoke
+MAX_TURNS=8
+export OPENSPEC_TELEMETRY=0
+
+rm -rf "$RUN" && mkdir -p "$RUN"
+cp -R "$REPO/smoke/fixture" "$RUN/work"
+(cd "$RUN/work" && git init -q && git add -A && git -c user.email=smoke@local -c user.name=smoke commit -qm "chore(smoke): init")
+git -C "$RUN/work" rev-parse HEAD > "$RUN/HEAD.before"
+cp -R "$REPO/smoke/specs" "$RUN/specs"
+(cd "$RUN/specs" && git init -q && git add -A && git -c user.email=smoke@local -c user.name=smoke commit -qm "docs(smoke): approved change")
+mkdir -p "$HOME/specs"
+ln -sfn "$RUN/specs" "$HOME/specs/opencode-smoke"
+
+set -a; [ -f "$HOME/.openviking/.env" ] && . "$HOME/.openviking/.env"; set +a
+CFG="${OPENCODE_CONFIG_DIR:-$REPO}"
+TASKS="$RUN/specs/openspec/changes/smoke-change/tasks.md"
+START=$(date +%s)
+cd "$RUN/work"
+
+OPENCODE_CONFIG_DIR="$CFG" opencode run --agent orchestrator --format json \
+  --title "[change:opencode-smoke/smoke-change]" \
+  "The spec and the plan for change smoke-change in project opencode-smoke are already approved. Execute it now with the change-execute skill without asking questions. The specs root is ~/specs/opencode-smoke. When all tasks are accepted, write the proposed commit messages, one per line, to $RUN/proposed-commits.txt." \
+  >> "$RUN/events.log" 2>> "$RUN/stderr.log"
+SID=$(grep -o '"sessionID":"[^"]*"' "$RUN/events.log" | head -1 | cut -d'"' -f4)
+
+TURN=1
+while grep -q '^- \[ \]' "$TASKS" || [[ ! -s "$RUN/proposed-commits.txt" ]]; do
+  [[ $TURN -ge $MAX_TURNS ]] && break
+  TURN=$((TURN + 1))
+  OPENCODE_CONFIG_DIR="$CFG" opencode run --agent orchestrator --format json --session "$SID" \
+    "Continue the change smoke-change from its files. Do not ask questions. When all tasks are accepted, write the proposed commit messages, one per line, to $RUN/proposed-commits.txt." \
+    >> "$RUN/events.log" 2>> "$RUN/stderr.log"
+done
+END=$(date +%s)
+
+{
+  echo "## Smoke run $(date '+%Y-%m-%d %H:%M')"
+  echo "Duration: $((END - START)) s, turns: $TURN"
+  "$REPO/bin/smoke-check" "$RUN" || true
+  echo
+} >> "$REPO/smoke/RESULTS.md"
+echo "smoke-run: finished in $((END - START)) s after $TURN turns, events in $RUN/events.log"

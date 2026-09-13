@@ -100,6 +100,8 @@
         },
         "bash": {
           "*": "ask",
+          "command -v *": "allow",
+          "type *": "allow",
           "sort*": "allow",
           "uniq*": "allow",
           "cut *": "allow",
@@ -245,6 +247,8 @@
         },
         "bash": {
           "*": "ask",
+          "command -v *": "allow",
+          "type *": "allow",
           "sort*": "allow",
           "uniq*": "allow",
           "cut *": "allow",
@@ -333,6 +337,8 @@
         },
         "bash": {
           "*": "ask",
+          "command -v *": "allow",
+          "type *": "allow",
           "sort*": "allow",
           "uniq*": "allow",
           "cut *": "allow",
@@ -418,6 +424,8 @@
         },
         "bash": {
           "*": "ask",
+          "command -v *": "allow",
+          "type *": "allow",
           "sort*": "allow",
           "uniq*": "allow",
           "cut *": "allow",
@@ -500,6 +508,8 @@
         },
         "bash": {
           "*": "ask",
+          "command -v *": "allow",
+          "type *": "allow",
           "sort*": "allow",
           "uniq*": "allow",
           "cut *": "allow",
