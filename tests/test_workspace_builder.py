@@ -6,7 +6,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 HOME = str(Path.home())
-L = importlib.machinery.SourceFileLoader("claude_link", str(REPO / "bin" / "claude-link")).load_module()
+CLAUDE_LINK = REPO / "bin" / "claude-link"
+
+
+# bin/claude-link may be absent on a clean checkout, so load it only in the tests that need it.
+def load_claude_link():
+    return importlib.machinery.SourceFileLoader("claude_link", str(CLAUDE_LINK)).load_module()
 
 
 # Mirrors match, expand and decide in tests/permissions.test.mjs: the last matching rule wins.
@@ -96,8 +101,9 @@ class WorkspaceBuilderAgent(unittest.TestCase):
         self.assertIn("workspace-create", prompt)
         self.assertIn("workspace-extend", prompt)
 
+    @unittest.skipUnless(CLAUDE_LINK.exists(), "bin/claude-link is not present in this checkout")
     def test_claude_link_plans_agent_with_prompt_body(self):
-        plan = L.plan_agents(REPO)
+        plan = load_claude_link().plan_agents(REPO)
         self.assertIn("workspace-builder", plan)
         body = (REPO / "prompts" / "workspace-builder.md").read_text().rstrip("\n")
         self.assertIn("name: workspace-builder", plan["workspace-builder"])
