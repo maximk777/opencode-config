@@ -29,7 +29,8 @@ OPENCODE_CONFIG_DIR="$CFG" opencode run --agent orchestrator --format json \
 SID=$(grep -o '"sessionID":"[^"]*"' "$RUN/events.log" | head -1 | cut -d'"' -f4)
 
 TURN=1
-while grep -q '^- \[ \]' "$TASKS" || [[ ! -s "$RUN/proposed-commits.txt" ]]; do
+ARCHIVE="$RUN/specs/openspec/changes/archive"
+while grep -q '^- \[ \]' "$TASKS" || [[ ! -s "$RUN/proposed-commits.txt" ]] || [[ -z "$(ls -A "$ARCHIVE" 2>/dev/null)" ]]; do
   [[ $TURN -ge $MAX_TURNS ]] && break
   TURN=$((TURN + 1))
   OPENCODE_CONFIG_DIR="$CFG" opencode run --agent orchestrator --format json --session "$SID" \

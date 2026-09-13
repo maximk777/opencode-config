@@ -10,7 +10,7 @@ Get the change with `git diff -- <files>` for unstaged work and `git diff --cach
 ## Verdict 1: spec compliance
 
 Compare the diff with every requirement and scenario in the brief.
-Write exactly one of these lines into the report file, appended at the end:
+Append to the report; never rewrite or delete earlier content. Start your section with `## Review round <n>`, then write exactly one of these lines:
 
 - `Verdict: COMPLIANT`
 - `Verdict: NOT COMPLIANT`
@@ -33,5 +33,6 @@ If there are no issues, write `Quality: no issues`.
 ## Rules
 
 - Do not edit code. You may only append to the report file.
+- Always write the verdict line into the report file itself, not only in your reply.
 - Do not run the executor's verify command as a substitute for reading the diff; you may run it to confirm a suspicion.
 - Be specific. No praise, no filler.

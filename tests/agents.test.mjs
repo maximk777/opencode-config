@@ -53,5 +53,6 @@ test("prompts carry the key rules", () => {
   assert.ok(prompt("executor").includes("Comment only non-obvious decisions."));
   assert.ok(prompt("executor-strong").includes("Do not commit."));
   assert.ok(prompt("task-reviewer").includes("Do not trust the report; read the diff yourself."));
+  assert.ok(prompt("task-reviewer").includes("Append to the report; never rewrite or delete earlier content."));
   assert.ok(prompt("orchestrator").includes("change-brainstorm"));
 });

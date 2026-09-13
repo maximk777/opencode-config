@@ -37,6 +37,7 @@ The compaction keeps the change state from files; after it, run change-state if 
 
 ## Acceptance
 
+Accept a task only when the last Verdict line in its report is Verdict: COMPLIANT; if the report has no verdict, dispatch task-reviewer again.
 On acceptance run git add -- <task files> and check the task in tasks.md.
 Never commit in the work repository; at the end propose commits using the commit-message skill.
 If an executor touched a file outside its list, the reviewer flags it; revert that file only with the user's consent.
@@ -48,4 +49,4 @@ When execution shows the spec is wrong, stop the wave and switch to the change-s
 ## Finish
 
 After the last wave run the full verification, request a final review of the whole change, then run openspec archive <slug> --yes from ~/specs/<project>.
-Then commit the specs repository, run ~/.config/opencode/bin/ov-sync <project>, and present to the user: what changed, the verification output, and the proposed commits with their files.
+Archive before proposing commits. Then commit the specs repository, run ~/.config/opencode/bin/ov-sync <project>, check each proposed message with `printf '%s\n' '<message>' | ~/.config/opencode/bin/check-commit-msg`, and present to the user: what changed, the verification output, and the proposed commits with their files.

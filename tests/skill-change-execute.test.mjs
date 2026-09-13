@@ -8,6 +8,8 @@ checkSkill("change-execute", [
   "task-reviewer gives the spec verdict first and assesses quality only when compliant.",
   "After three rejected fix rounds with the same executor, dispatch executor-strong; if that fails, ask the user.",
   "On acceptance run git add -- <task files> and check the task in tasks.md.",
+  "Accept a task only when the last Verdict line in its report is Verdict: COMPLIANT; if the report has no verdict, dispatch task-reviewer again.",
+  "Archive before proposing commits.",
   "Never commit in the work repository; at the end propose commits using the commit-message skill.",
   "On resume run ~/.config/opencode/bin/change-state ~/specs/<project> <slug> and continue from its output.",
   "When execution shows the spec is wrong, stop the wave and switch to the change-spec skill.",
