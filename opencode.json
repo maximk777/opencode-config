@@ -1,6 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["AGENTS.md"],
+  "instructions": [
+    "AGENTS.md"
+  ],
   "permission": {
     "read": "allow",
     "glob": "allow",
@@ -14,19 +16,49 @@
     "corellm-llm": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "WB CoreLLM",
-      "options": { "baseURL": "https://llm.wb.ru/api/v1", "apiKey": "{env:CORELLM_TOKEN}" },
+      "options": {
+        "baseURL": "https://llm.wb.ru/api/v1",
+        "apiKey": "{env:CORELLM_TOKEN}"
+      },
       "models": {
-        "llm-medium": { "name": "DeepSeek V4 Flash (CoreLLM)", "limit": { "context": 256000, "output": 16192 } },
-        "coder": { "name": "GLM-5.3-Flash (CoreLLM)", "limit": { "context": 262144, "output": 8096 } }
+        "llm-medium": {
+          "name": "DeepSeek V4 Flash (CoreLLM)",
+          "limit": {
+            "context": 256000,
+            "output": 16192
+          }
+        },
+        "coder": {
+          "name": "GLM-5.3-Flash (CoreLLM)",
+          "limit": {
+            "context": 262144,
+            "output": 8096
+          }
+        }
       }
     },
     "deepseek": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "DeepSeek API",
-      "options": { "baseURL": "https://api.deepseek.com", "apiKey": "{env:DEEPSEEK_API_KEY}" },
+      "options": {
+        "baseURL": "https://api.deepseek.com",
+        "apiKey": "{env:DEEPSEEK_API_KEY}"
+      },
       "models": {
-        "deepseek-flash": { "name": "DeepSeek V4.1 Flash", "limit": { "context": 1000000, "output": 384000 } },
-        "deepseek-v4-pro": { "name": "DeepSeek V4 Pro", "limit": { "context": 1000000, "output": 384000 } }
+        "deepseek-flash": {
+          "name": "DeepSeek V4.1 Flash",
+          "limit": {
+            "context": 1000000,
+            "output": 384000
+          }
+        },
+        "deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro",
+          "limit": {
+            "context": 1000000,
+            "output": 384000
+          }
+        }
       }
     }
   },
@@ -40,7 +72,107 @@
       "permission": {
         "edit": "deny",
         "task": "deny",
-        "bash": { "*": "deny", "git log*": "allow", "git show*": "allow", "rg *": "allow" }
+        "bash": {
+          "*": "deny",
+          "git log*": "allow",
+          "git show*": "allow",
+          "rg *": "allow"
+        }
+      }
+    },
+    "orchestrator": {
+      "mode": "primary",
+      "description": "Runs one change from brainstorm to archive",
+      "model": "{file:./tiers/smart}",
+      "prompt": "{file:./prompts/orchestrator.md}",
+      "permission": {
+        "edit": {
+          "*": "deny",
+          "*specs/*": "allow"
+        },
+        "task": {
+          "*": "deny",
+          "executor": "allow",
+          "executor-strong": "allow",
+          "task-reviewer": "allow",
+          "explorer": "allow"
+        },
+        "bash": {
+          "*": "ask",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git add -- *": "allow",
+          "git -C *": "allow",
+          "git commit*": "deny",
+          "git push*": "deny",
+          "openspec *": "allow",
+          "mkdir *": "allow",
+          "*/bin/waves *": "allow",
+          "*/bin/change-state *": "allow",
+          "*/bin/check-commit-msg*": "allow"
+        }
+      }
+    },
+    "executor": {
+      "mode": "subagent",
+      "hidden": true,
+      "description": "Implements one task from a brief file",
+      "model": "{file:./tiers/fast}",
+      "prompt": "{file:./prompts/executor.md}",
+      "steps": 40,
+      "permission": {
+        "task": "deny",
+        "bash": {
+          "*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny"
+        },
+        "openviking_*": "deny",
+        "openviking_find": "allow",
+        "openviking_read": "allow"
+      }
+    },
+    "executor-strong": {
+      "mode": "subagent",
+      "hidden": true,
+      "description": "Implements one prose-described or escalated task from a brief file",
+      "model": "{file:./tiers/smart}",
+      "prompt": "{file:./prompts/executor-strong.md}",
+      "steps": 60,
+      "permission": {
+        "task": "deny",
+        "bash": {
+          "*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny"
+        },
+        "openviking_*": "deny",
+        "openviking_find": "allow",
+        "openviking_read": "allow"
+      }
+    },
+    "task-reviewer": {
+      "mode": "subagent",
+      "hidden": true,
+      "description": "Reviews one task: spec verdict first, quality only when compliant",
+      "model": "{file:./tiers/smart}",
+      "prompt": "{file:./prompts/task-reviewer.md}",
+      "steps": 30,
+      "permission": {
+        "edit": {
+          "*": "deny",
+          "*reports/*": "allow"
+        },
+        "task": "deny",
+        "openviking_*": "deny",
+        "bash": {
+          "*": "deny",
+          "git diff*": "allow",
+          "git show*": "allow",
+          "go test*": "allow",
+          "npm test*": "allow"
+        }
       }
     }
   }
