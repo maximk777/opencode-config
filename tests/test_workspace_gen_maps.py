@@ -1,0 +1,430 @@
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "kits/workspace/tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import json
+import subprocess
+import tempfile
+import unittest
+
+import generate
+from wslib import gen_maps, rules_generated
+from wslib.common import Context
+
+SCRIPT = REPO / "kits/workspace/tools/generate.py"
+FIXTURE = Path(__file__).resolve().parent / "fixtures/profiles/checklist/profile.json"
+
+UI_MIGRATION = {
+    "name": "ui-migration",
+    "elements": [
+        {
+            "kind": "screen",
+            "prefix": "screen",
+            "dir": "map",
+            "fields": ["key", "route", "kind", "section", "parent", "access", "label", "wave", "story"],
+            "may_be_empty": ["parent", "story"],
+            "values": {"kind": ["place"]},
+            "tables": [{"heading": "Transitions", "columns": ["Action", "Target"], "keys": ["Target"]}],
+        }
+    ],
+    "story": {
+        "fields": ["key", "type", "wave", "tracker", "scope", "depends", "repos", "decisions", "mockups"],
+        "may_be_empty": ["tracker", "scope", "depends", "repos", "decisions", "mockups"],
+        "values": {"type": ["story"]},
+        "sections": ["Goal", "Scope", "Acceptance criteria", "Verification", "Out of scope", "Open questions"],
+    },
+    "epic": {
+        "sections": ["Goal", "Scope", "Success criteria", "Out of scope", "Open questions", "Target users", "Product"]
+    },
+    "map_doc": {
+        "tables": [
+            {
+                "heading": "Legacy trace",
+                "columns": ["Legacy group", "Legacy item", "Legacy route", "Target"],
+                "target": "Target",
+            }
+        ]
+    },
+    "stages": {
+        "goal": [{"gate": "epic_sections"}, {"gate": "approval"}],
+        "map": [
+            {"gate": "unique_keys"},
+            {"gate": "no_dangling_targets"},
+            {"gate": "legacy_traced", "table": "Legacy trace"},
+            {"gate": "approval"},
+        ],
+        "decomposition": [{"gate": "two_way_coverage"}, {"gate": "approval"}],
+        "ready": [{"gate": "tracker_ids"}, {"gate": "no_open_questions", "section": "Open questions"}],
+        "delivery": [],
+        "done": [{"gate": "work_records"}],
+    },
+}
+
+SCREEN_LIST = """---
+key: screen:operations/list
+route: /operations
+kind: place
+section: Operations
+parent:
+access: listOperations
+label: Operations
+wave: 1
+story:
+---
+# Operations list
+
+## Transitions
+
+| Action | Target |
+|---|---|
+| Open | screen:operations/card |
+| Back | screen:clients/home |
+"""
+
+SCREEN_CARD = """---
+key: screen:operations/card
+route: /operations/:id
+kind: place
+section: Operations
+parent: screen:operations/list
+access: getOperation
+label: Operation
+wave: 1
+story: story:operations/documents
+---
+# Operation card
+
+## Notes
+
+No table here.
+"""
+
+SCREEN_EXPORT = """---
+key: screen:operations/export
+route: /operations/export
+kind: place
+section: Operations
+parent: screen:operations/list
+access: exportOperations
+label: Export
+wave: 2
+story:
+---
+# Export
+
+## Transitions
+
+| Action | Target |
+|---|---|
+| Done | screen:operations/list |
+"""
+
+MAP_HEAD = "# Map of domain operations\n\nHand-written intro.\n\n"
+MAP_TAIL = (
+    "\n## Legacy trace\n"
+    "| Legacy group | Legacy item | Legacy route | Target |\n"
+    "|---|---|---|---|\n"
+    "| Ops | List | /old/ops | screen:operations/list |\n"
+)
+MAP_SOURCE = (
+    MAP_HEAD
+    + "## Screens\n<!-- map:screens:begin -->\nstale\n<!-- map:screens:end -->\n\n"
+    + "## Transitions\n<!-- map:transitions:begin -->\n<!-- map:transitions:end -->\n"
+    + MAP_TAIL
+)
+
+SCREENS_TABLE = (
+    "| key | route | kind | section | parent | access | label | wave | story |\n"
+    "|---|---|---|---|---|---|---|---|---|\n"
+    "| screen:operations/card | /operations/:id | place | Operations | screen:operations/list | getOperation"
+    " | Operation | 1 | story:operations/documents |\n"
+    "| screen:operations/list | /operations | place | Operations |  | listOperations | Operations | 1 |  |\n"
+)
+TRANSITIONS_TABLE = (
+    "| From | Action | Target |\n"
+    "|---|---|---|\n"
+    "| screen:operations/list | Open | screen:operations/card |\n"
+    "| screen:operations/list | Back | screen:clients/home |\n"
+)
+
+STORY_DOCUMENTS = """---
+key: story:operations/documents
+type: story
+wave: 1
+tracker:
+scope: [screen:operations/card, screen:operations/list]
+unmapped: Export to Excel
+depends: []
+repos: []
+decisions: []
+mockups: []
+---
+# Documents
+
+## Goal
+
+Documents.
+"""
+
+STORY_REPORTS = """---
+key: story:operations/reports
+type: story
+wave: 2
+tracker: TASK-2
+scope:
+  - screen:operations/list
+depends: [story:operations/documents]
+repos: []
+decisions: []
+mockups: []
+---
+# Reports
+
+## Goal
+
+Reports.
+"""
+
+BREAKDOWN_HEAD = (
+    "# Breakdown of stream:operations/main\n"
+    "\n"
+    "Generated by tools/generate.py from stories/*/story.md. Do not edit.\n"
+    "\n"
+    "| Story | Wave | Scope | Unmapped | Tracker | Depends |\n"
+    "|---|---|---|---|---|---|\n"
+)
+
+
+def stream_json(domain, stream):
+    data = {
+        "key": "stream:%s/%s" % (domain, stream),
+        "profile": "ui-migration",
+        "stage": "goal",
+        "scope": [],
+        "approvals": [],
+    }
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def strip_between_markers(text):
+    """Drop lines strictly between map begin and end markers."""
+    kept = []
+    inside = False
+    for line in text.split("\n"):
+        if line.startswith("<!-- map:") and line.endswith(":end -->"):
+            inside = False
+        if not inside:
+            kept.append(line)
+        if line.startswith("<!-- map:") and line.endswith(":begin -->"):
+            inside = True
+    return "\n".join(kept)
+
+
+class MapsTestCase(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name).resolve()
+        self.write(".agents/kit.json", json.dumps({"name": "workspace", "version": "0.1.0", "params": {}}) + "\n")
+        self.write(
+            ".agents/profiles/ui-migration/profile.json",
+            json.dumps(UI_MIGRATION, indent=2, ensure_ascii=False) + "\n",
+        )
+        self.write("domains/operations/map/list.md", SCREEN_LIST)
+        self.write("domains/operations/map/card.md", SCREEN_CARD)
+        self.write("domains/operations/MAP.md", MAP_SOURCE)
+        self.write("domains/operations/streams/main/stream.json", stream_json("operations", "main"))
+        # Written in reverse order so the output order cannot come from creation order.
+        self.write("domains/operations/streams/main/stories/reports/story.md", STORY_REPORTS)
+        self.write("domains/operations/streams/main/stories/documents/story.md", STORY_DOCUMENTS)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def write(self, rel, text):
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def write_out(self, out):
+        for rel, data in out.items():
+            path = self.root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+
+
+class MapTablesTest(MapsTestCase):
+    def test_exact_map_tables(self):
+        out = gen_maps.render(self.root)
+        expected = (
+            MAP_HEAD
+            + "## Screens\n<!-- map:screens:begin -->\n" + SCREENS_TABLE + "<!-- map:screens:end -->\n\n"
+            + "## Transitions\n<!-- map:transitions:begin -->\n" + TRANSITIONS_TABLE + "<!-- map:transitions:end -->\n"
+            + MAP_TAIL
+        )
+        self.assertEqual(out["domains/operations/MAP.md"], expected.encode("utf-8"))
+
+    def test_added_screen_changes_only_lines_between_markers(self):
+        self.write_out(gen_maps.render(self.root))
+        before = (self.root / "domains/operations/MAP.md").read_text(encoding="utf-8")
+        self.write("domains/operations/map/export.md", SCREEN_EXPORT)
+        after = gen_maps.render(self.root)["domains/operations/MAP.md"].decode("utf-8")
+        self.assertNotEqual(after, before)
+        self.assertEqual(strip_between_markers(after), strip_between_markers(before))
+        self.assertTrue(after.endswith(MAP_TAIL))
+        self.assertIn("| screen:operations/export | Done | screen:operations/list |\n", after)
+        self.assertLess(after.index("| screen:operations/card | /"), after.index("| screen:operations/export | /"))
+        self.assertLess(after.index("| screen:operations/export | /"), after.index("| screen:operations/list | /"))
+
+    def test_absent_marker_pair_is_skipped(self):
+        text = (
+            "# Map\n<!-- map:screens:begin -->\n<!-- map:screens:end -->\n"
+            "<!-- map:transitions:begin -->\nhand text\n"
+        )
+        self.write("domains/operations/MAP.md", text)
+        out = gen_maps.render(self.root)
+        expected = (
+            "# Map\n<!-- map:screens:begin -->\n" + SCREENS_TABLE + "<!-- map:screens:end -->\n"
+            "<!-- map:transitions:begin -->\nhand text\n"
+        )
+        self.assertEqual(out["domains/operations/MAP.md"], expected.encode("utf-8"))
+
+    def test_map_without_expected_begin_markers_is_not_rendered(self):
+        self.write("domains/operations/MAP.md", "# Map\n<!-- map:rules:begin -->\n<!-- map:rules:end -->\n")
+        self.assertNotIn("domains/operations/MAP.md", gen_maps.render(self.root))
+
+    def test_checklist_domain_renders_rules_and_checks(self):
+        self.write(".agents/profiles/checklist/profile.json", FIXTURE.read_text(encoding="utf-8"))
+        self.write(
+            "domains/ops/rules/r1.md",
+            "---\nkey: rule:ops/r1\nowner: me\nstory:\n---\n# R1\n\n## Checks\n\n"
+            "| Check | Target |\n|---|---|\n| Lint | screen:operations/list |\n",
+        )
+        self.write(
+            "domains/ops/MAP.md",
+            "# Ops\n<!-- map:rules:begin -->\n<!-- map:rules:end -->\n<!-- map:checks:begin -->\n<!-- map:checks:end -->\n",
+        )
+        out = gen_maps.render(self.root)
+        expected = (
+            "# Ops\n<!-- map:rules:begin -->\n"
+            "| key | owner | story |\n|---|---|---|\n| rule:ops/r1 | me |  |\n"
+            "<!-- map:rules:end -->\n<!-- map:checks:begin -->\n"
+            "| From | Check | Target |\n|---|---|---|\n| rule:ops/r1 | Lint | screen:operations/list |\n"
+            "<!-- map:checks:end -->\n"
+        )
+        self.assertEqual(out["domains/ops/MAP.md"], expected.encode("utf-8"))
+
+
+class MapSourceShapesTest(MapsTestCase):
+    def expected_map(self, screens=SCREENS_TABLE, transitions=TRANSITIONS_TABLE):
+        return (
+            MAP_HEAD
+            + "## Screens\n<!-- map:screens:begin -->\n" + screens + "<!-- map:screens:end -->\n\n"
+            + "## Transitions\n<!-- map:transitions:begin -->\n" + transitions + "<!-- map:transitions:end -->\n"
+            + MAP_TAIL
+        )
+
+    def test_crlf_map_round_trips_with_only_block_lines_changed(self):
+        rel = "domains/operations/MAP.md"
+        (self.root / rel).write_bytes(MAP_SOURCE.replace("\n", "\r\n").encode("utf-8"))
+        out = gen_maps.render(self.root)[rel]
+        self.assertEqual(out, self.expected_map().replace("\n", "\r\n").encode("utf-8"))
+        self.write_out({rel: out})
+        self.assertEqual(gen_maps.render(self.root)[rel], out)
+        stale = [f for f in rules_generated.check_generated(Context(self.root)) if f.path == rel]
+        self.assertEqual(stale, [])
+
+    def test_reordered_source_columns_render_in_profile_order(self):
+        self.write(
+            "domains/operations/map/list.md",
+            SCREEN_LIST.replace("| Action | Target |", "| Target | Action |")
+            .replace("| Open | screen:operations/card |", "| screen:operations/card | Open |")
+            .replace("| Back | screen:clients/home |", "| screen:clients/home | Back |"),
+        )
+        out = gen_maps.render(self.root)["domains/operations/MAP.md"].decode("utf-8")
+        self.assertEqual(out, self.expected_map())
+
+    def test_transitions_table_with_parse_error_renders_well_formed_rows(self):
+        self.write(
+            "domains/operations/map/list.md",
+            SCREEN_LIST.replace("| Back |", "| Broken | a | b |\n| Back |"),
+        )
+        out = gen_maps.render(self.root)["domains/operations/MAP.md"].decode("utf-8")
+        self.assertEqual(out, self.expected_map())
+
+    def test_element_with_broken_frontmatter_is_excluded(self):
+        self.write("domains/operations/map/card.md", SCREEN_CARD.replace("access: getOperation", "access getOperation"))
+        out = gen_maps.render(self.root)["domains/operations/MAP.md"].decode("utf-8")
+        screens = (
+            "| key | route | kind | section | parent | access | label | wave | story |\n"
+            "|---|---|---|---|---|---|---|---|---|\n"
+            "| screen:operations/list | /operations | place | Operations |  | listOperations | Operations | 1 |  |\n"
+        )
+        self.assertEqual(out, self.expected_map(screens=screens))
+
+
+class BreakdownTest(MapsTestCase):
+    def test_exact_breakdown_in_slug_order(self):
+        out = gen_maps.render(self.root)
+        expected = (
+            BREAKDOWN_HEAD
+            + "| story:operations/documents | 1 | screen:operations/card, screen:operations/list"
+            " | Export to Excel |  |  |\n"
+            + "| story:operations/reports | 2 | screen:operations/list |  | TASK-2 | story:operations/documents |\n"
+        )
+        self.assertEqual(out["domains/operations/streams/main/BREAKDOWN.md"], expected.encode("utf-8"))
+
+    def test_stream_without_stories_has_header_only(self):
+        self.write("domains/operations/streams/empty/stream.json", stream_json("operations", "empty"))
+        out = gen_maps.render(self.root)
+        expected = BREAKDOWN_HEAD.replace("stream:operations/main", "stream:operations/empty")
+        self.assertEqual(out["domains/operations/streams/empty/BREAKDOWN.md"], expected.encode("utf-8"))
+
+    def test_stream_without_usable_stream_json_is_not_rendered(self):
+        self.write("domains/operations/streams/broken/stream.json", "{not json\n")
+        self.write("domains/operations/streams/broken/stories/a/story.md", STORY_DOCUMENTS)
+        self.assertNotIn("domains/operations/streams/broken/BREAKDOWN.md", gen_maps.render(self.root))
+
+    def test_story_with_broken_frontmatter_is_skipped(self):
+        self.write("domains/operations/streams/main/stories/reports/story.md", "---\nkey: story:x\n")
+        out = gen_maps.render(self.root)["domains/operations/streams/main/BREAKDOWN.md"].decode("utf-8")
+        self.assertIn("| story:operations/documents |", out)
+        self.assertNotIn("story:operations/reports", out)
+
+
+class RepeatTest(MapsTestCase):
+    def test_render_twice_equal(self):
+        first = gen_maps.render(self.root)
+        self.write_out(first)
+        self.assertEqual(gen_maps.render(self.root), first)
+
+    def test_render_all_includes_map_outputs(self):
+        rendered = generate.render_all(self.root)
+        for rel, data in gen_maps.render(self.root).items():
+            self.assertEqual(rendered.get(rel), data, rel)
+        self.assertIn("domains/operations/MAP.md", rendered)
+        self.assertIn("domains/operations/streams/main/BREAKDOWN.md", rendered)
+
+    def run_script(self):
+        return subprocess.run(
+            [sys.executable, str(SCRIPT)],
+            cwd=str(self.root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+        )
+
+    def test_generate_script_second_run_changes_nothing(self):
+        first = self.run_script()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertIn(SCREENS_TABLE, (self.root / "domains/operations/MAP.md").read_text(encoding="utf-8"))
+        self.assertTrue((self.root / "domains/operations/streams/main/BREAKDOWN.md").is_file())
+        second = self.run_script()
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("generated: 0 files changed", second.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()

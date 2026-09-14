@@ -6,7 +6,11 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from wslib.common import Context
+from wslib.model import Workspace
+
 BEGIN = "<!-- repos:begin -->"
+EXTERNAL_PREFIXES = ("diagram:", "mockup:")
 END = "<!-- repos:end -->"
 ADR_RE = re.compile(r"([0-9]{4})-[a-z0-9-]+\.md")
 TABLE_HEADER = ["| Name | Forge | Default branch | Roles | Summary |", "|---|---|---|---|---|"]
@@ -93,13 +97,23 @@ def _render_index(root: Path) -> bytes:
             if not isinstance(entry, dict):
                 continue
             key, url = entry.get("key"), entry.get("url")
-            # Only diagram keys are non-derivable; anything else would leak derivable keys into the index.
-            if not (isinstance(key, str) and key.startswith("diagram:") and len(key) > len("diagram:")):
+            # Only diagram and mockup keys are non-derivable; anything else would leak derivable keys into the index.
+            if not (isinstance(key, str) and any(key.startswith(p) and len(key) > len(p) for p in EXTERNAL_PREFIXES)):
                 continue
             # Lone surrogates skip the entry; an existing key (a docs/diagrams/*.md file) wins over external.json.
             if not isinstance(url, str) or not _encodable(key) or not _encodable(url) or key in index:
                 continue
             index[key] = url
+    # The model discovers stories from Context files: ignored story files stay out,
+    # stories in folders without stream.json are indexed.
+    stories = [s for s in Workspace(Context(root)).stories.values() if s.fields is not None and s.error is None]
+    stories.sort(key=lambda s: s.key)
+    for story in stories:
+        index.setdefault(story.key, story.path)
+    aliases = [(s.fields.get("tracker"), s.path) for s in stories]
+    # Stable sort keeps the smaller story key first when two stories share a tracker id.
+    for tracker, path in sorted((a for a in aliases if isinstance(a[0], str) and a[0]), key=lambda a: a[0]):
+        index.setdefault(tracker, path)
     return (json.dumps(index, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
