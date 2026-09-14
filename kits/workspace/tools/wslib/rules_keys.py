@@ -4,9 +4,11 @@ from __future__ import annotations
 import re
 from typing import List, Optional, Tuple
 
-from wslib.common import Finding, md_links, resolve_target
+from wslib.common import Finding, md_links, parse_frontmatter, resolve_target
 
-KEY_RE = re.compile(r"^(adr|diagram|repo|stand|domain):(.+)$")
+KEY_RE = re.compile(r"^(adr|diagram|mockup|repo|stand|domain|screen|story|stream):(.+)$")
+PAIR_RE = re.compile(r"^([^/]+)/([^/]+)$")
+STORY_RE = re.compile(r"^domains/[^/]+/streams/[^/]+/stories/[^/]+/story\.md$")
 # CommonMark: a backtick fence's info string may not contain backticks.
 FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}(?!.*`)|~{3,}).*$")
 CODE_SPAN_RE = re.compile(r"(`+)(.+?)\1")
@@ -41,10 +43,30 @@ def lookup(ctx, key: str) -> Tuple[bool, Optional[List[str]]]:
         if len(matches) != 1:
             return False, []
         return True, matches
-    if kind == "diagram":
+    if kind in ("screen", "story", "stream"):
+        pair = PAIR_RE.match(rest)
+        if not pair:
+            return False, []
+        domain, name = pair.group(1), pair.group(2)
+        if kind == "screen":
+            target = "domains/%s/map/%s.md" % (domain, name)
+        elif kind == "stream":
+            target = "domains/%s/streams/%s/stream.json" % (domain, name)
+        else:
+            data = ctx.load_json(".agents/index.json")[0] if ".agents/index.json" in ctx.files else None
+            target = data.get(key) if isinstance(data, dict) else None
+            # The index entry must name this story's own file, not any other existing file.
+            story_re = re.compile(
+                r"^domains/" + re.escape(domain) + r"/streams/[^/]+/stories/" + re.escape(name) + r"/story\.md$")
+            if not isinstance(target, str) or not story_re.match(target):
+                return False, []
+        if target not in ctx.files:
+            return False, []
+        return True, [target]
+    if kind in ("diagram", "mockup"):
         targets = []
         local = "docs/diagrams/%s.md" % rest
-        if local in ctx.files:
+        if kind == "diagram" and local in ctx.files:
             targets.append(local)
         for entry in _json_list(ctx, "docs/diagrams/external.json", "diagrams"):
             if isinstance(entry.get("key"), str) and entry["key"] == key and isinstance(entry.get("url"), str):
@@ -113,8 +135,23 @@ def _points_to(rel: str, target: str, accepted: List[str]) -> bool:
     return False
 
 
+def _story_trackers(ctx) -> dict:
+    """Map each non-empty story frontmatter tracker to the story.md paths carrying it."""
+    trackers: dict = {}
+    for rel in ctx.files:
+        if not STORY_RE.match(rel):
+            continue
+        text = ctx.read_text(rel)
+        data = parse_frontmatter(text)[0] if text is not None else None
+        tracker = data.get("tracker") if isinstance(data, dict) else None
+        if isinstance(tracker, str) and tracker:
+            trackers.setdefault(tracker, []).append(rel)
+    return trackers
+
+
 def check_key_resolve(ctx) -> List[Finding]:
     id_re, url = _tracker(ctx)
+    trackers = _story_trackers(ctx) if id_re is not None else {}
     findings: List[Finding] = []
     for rel in ctx.files:
         if not rel.endswith(".md"):
@@ -132,6 +169,7 @@ def check_key_resolve(ctx) -> List[Finding]:
                 accepted = [url.replace("{id}", label)]
                 if "work/%s/record.md" % label in ctx.files:
                     accepted += ["work/%s" % label, "work/%s/record.md" % label]
+                accepted += trackers.get(label, [])
             else:
                 continue
             if accepted is not None and not _points_to(rel, target, accepted):

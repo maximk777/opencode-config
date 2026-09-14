@@ -23,6 +23,7 @@ REQUIRED = [
     "tools/generate.py",
 ]
 FORGES = ("gitlab", "github", "git")
+STATUSES = ("active", "planned")
 KIT_PARAMS = ("workspace_name", "title", "forge", "id_pattern", "tracker_url")
 # Used with fullmatch: "$" in match() would accept a trailing newline.
 STAND_KEY_RE = re.compile(r"stand:[a-z0-9][a-z0-9-]*")
@@ -70,7 +71,14 @@ def _repos(ctx: Context, rel: str, data) -> List[Finding]:
         def bad(message, line=line, label=label):
             findings.append(Finding(rel, line, "json-shape", "%s %s" % (label, message)))
 
-        for field in ("name", "remote", "default_branch", "summary"):
+        status = entry.get("status")
+        if "status" in entry and status not in STATUSES:
+            bad("status must be one of %s" % ", ".join(STATUSES))
+        fields = ["name", "default_branch", "summary"]
+        # A planned repository does not exist yet, but a remote it already names must still be valid.
+        if status != "planned" or "remote" in entry:
+            fields.insert(1, "remote")
+        for field in fields:
             if not _is_cell(entry.get(field)):
                 bad("%s must be a non-empty string without | or line breaks" % field)
         if entry.get("forge") not in FORGES:
@@ -80,7 +88,7 @@ def _repos(ctx: Context, rel: str, data) -> List[Finding]:
             bad("roles must be a list of non-empty strings without | or line breaks")
         for field, seen in (("name", names), ("remote", remotes)):
             value = entry.get(field)
-            if not isinstance(value, str):
+            if not isinstance(value, str) or value == "":
                 continue
             if value in seen:
                 bad("duplicate %s %s" % (field, value))

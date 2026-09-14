@@ -181,6 +181,69 @@ class CheckKeysTest(unittest.TestCase):
         for key in odd:
             self.assertFalse(lookup(ctx, key)[0], key)
 
+    STORY = "domains/operations/streams/docs/stories/upload/story.md"
+
+    def story(self, rel=STORY, tracker=""):
+        self.write(rel, "---\nkey: story:operations/upload\ntracker: %s\n---\n# Upload\n" % tracker)
+
+    def test_screen_link(self):
+        self.write("domains/operations/map/documents.md", "---\nkey: screen:operations/documents\n---\n")
+        self.write(self.STORY, "# Upload\n\nSee [screen:operations/documents](../../../../map/documents.md).\n")
+        self.assertEqual(self.findings(), [])
+
+    def test_screen_missing_file(self):
+        self.assert_fails("[screen:operations/documents](../domains/operations/map/documents.md)")
+
+    def test_screen_wrong_path(self):
+        self.write("domains/operations/map/documents.md", "# Documents\n")
+        self.assert_fails("[screen:operations/documents](../domains/operations/map/other.md)")
+
+    def test_unknown_mockup(self):
+        self.assert_fails("[mockup:risks/matches](https://example.test/x)")
+
+    def test_external_mockup(self):
+        self.write_json("docs/diagrams/external.json", {"diagrams": [
+            {"key": "mockup:risks/matches", "url": "https://example.test/x"}]})
+        self.assert_passes("[mockup:risks/matches](https://example.test/x)")
+        self.assert_fails("[mockup:risks/matches](https://example.test/y)")
+
+    def test_stream_link(self):
+        self.assert_fails("[stream:operations/docs](../domains/operations/streams/docs/stream.json)")
+        self.write_json("domains/operations/streams/docs/stream.json", {"key": "stream:operations/docs"})
+        self.assert_passes("[stream:operations/docs](../domains/operations/streams/docs/stream.json)")
+        self.assert_fails("[stream:operations/docs](../domains/operations/streams/docs/README.md)")
+
+    def test_story_link_through_index(self):
+        self.story()
+        link = "[story:operations/upload](../domains/operations/streams/docs/stories/upload/story.md)"
+        self.assert_fails(link)
+        self.write_json(".agents/index.json", {"story:operations/upload": self.STORY})
+        self.assert_passes(link)
+        self.assert_fails("[story:operations/upload](../domains/operations/README.md)")
+
+    def test_story_index_entry_to_missing_file(self):
+        self.write_json(".agents/index.json", {"story:operations/upload": self.STORY})
+        self.assert_fails("[story:operations/upload](../domains/operations/streams/docs/stories/upload/story.md)")
+
+    def test_tracker_link_to_story_with_that_tracker(self):
+        self.story(tracker="TASK-1")
+        self.assert_passes("[TASK-1](../domains/operations/streams/docs/stories/upload/story.md)")
+
+    def test_tracker_link_to_story_with_other_tracker(self):
+        self.story(tracker="TASK-2")
+        self.assert_fails("[TASK-1](../domains/operations/streams/docs/stories/upload/story.md)")
+
+    def test_lookup_story_without_index_entry(self):
+        from wslib.common import Context
+        from wslib.rules_keys import lookup
+
+        self.story()
+        self.write_json(".agents/index.json", {"story:operations/other": self.STORY, "story:operations/upload": ["x"]})
+        ctx = Context(self.ws)
+        self.assertEqual(lookup(ctx, "story:x/y"), (False, []))
+        self.assertEqual(lookup(ctx, "story:operations/upload"), (False, []))
+        self.assertEqual(lookup(ctx, "story:operations/other"), (False, []))
+
 
 if __name__ == "__main__":
     unittest.main()

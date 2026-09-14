@@ -91,6 +91,53 @@ class CheckLayoutTest(unittest.TestCase):
         _, lines = self.findings()
         self.assertEqual([line for line in lines if line.startswith("repos.json:")], [])
 
+    def repos_json_lines(self, entries):
+        write_json(self.ws, "repos.json", {"repositories": entries})
+        _, lines = self.findings()
+        return [line for line in lines if line.startswith("repos.json:")]
+
+    def test_planned_repository_without_remote(self):
+        entry = repo_entry("mfe-abs-risks", "unused")
+        del entry["remote"]
+        entry["status"] = "planned"
+        self.assertEqual(self.repos_json_lines([entry]), [])
+
+    def test_active_repository_without_remote(self):
+        entry = repo_entry("api", "unused")
+        del entry["remote"]
+        lines = self.repos_json_lines([entry])
+        self.assertTrue(any(line.split(" ")[1] == "json-shape" and "remote" in line for line in lines), lines)
+
+    def test_explicit_active_repository_without_remote(self):
+        entry = repo_entry("api", "unused")
+        del entry["remote"]
+        entry["status"] = "active"
+        self.assertTrue(self.repos_json_lines([entry]))
+
+    def test_archived_status_is_reported(self):
+        entry = repo_entry("api", "git@x:api.git")
+        entry["status"] = "archived"
+        lines = self.repos_json_lines([entry])
+        self.assertTrue(any(line.split(" ")[1] == "json-shape" and "status" in line for line in lines), lines)
+
+    def test_planned_repository_with_remote(self):
+        entry = repo_entry("mfe-abs-risks", "git@x:risks.git")
+        entry["status"] = "planned"
+        self.assertEqual(self.repos_json_lines([entry, repo_entry("api", "git@x:api.git")]), [])
+
+    def test_planned_repositories_without_remote_are_not_duplicates(self):
+        first, second = repo_entry("a", "unused"), repo_entry("b", "unused")
+        for entry in (first, second):
+            del entry["remote"]
+            entry["status"] = "planned"
+        self.assertEqual(self.repos_json_lines([first, second]), [])
+
+    def test_duplicate_remote_still_reported(self):
+        planned = repo_entry("b", "git@x:api.git")
+        planned["status"] = "planned"
+        lines = self.repos_json_lines([repo_entry("a", "git@x:api.git"), planned])
+        self.assertTrue(any("duplicate remote" in line for line in lines), lines)
+
     def test_tracker_url_without_id(self):
         write_json(self.ws, "tracker/tracker.json", {"id_pattern": r"TASK-\d+", "url": "https://t.example/i/"})
         _, lines = self.findings()
