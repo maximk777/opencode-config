@@ -20,8 +20,9 @@ Running `init` again is safe: it keeps existing values and only adds what is mis
 6. Set the `.local/env` permissions:
    - If step 5 just created `.local/env`, run `chmod 600 .local/env` and remember "created with 600". Skip the rest of this step.
    - Otherwise run `ls -l .local/env` and look at the first 10 characters. If they are not `-rw-------`, run `chmod 600 .local/env` and remember "permissions fixed (were <first 10 characters>)". If they are `-rw-------`, remember "already 600".
-7. Build the repository list. Open `repos.json`. Take every entry of `repositories` whose `roles` list contains the role. Open `.local/repos.json`. For every name in `add`, take the entry of `repos.json` with that `name`; when there is none, mark the name `failed` with "not in repos.json", do not clone it in step 8, and keep it for the step 10 report. Remove every entry whose `name` is in `skip`. When a `name` appears more than once, for example a name in `add` that the role already includes, keep it once. Use each entry's `name` and `remote`.
+7. Build the repository list. Open `repos.json`. Take every entry of `repositories` whose `roles` list contains the role. Open `.local/repos.json`. For every name in `add`, take the entry of `repos.json` with that `name`; when there is none, mark the name `failed` with "not in repos.json", do not clone it in step 8, and keep it for the step 10 report. Remove every entry whose `name` is in `skip`. When a `name` appears more than once, for example a name in `add` that the role already includes, keep it once. Use each entry's `name`, `remote` and `status`. Mark every entry whose `status` is `planned` as `planned`: a planned repository does not exist yet and may have no `remote`, so it is never cloned.
 8. For each repository in the list, one at a time:
+   - When it is marked `planned`, run no command and go to the next repository.
    - Run `ls -d repos/<name>`. When it exists, mark it `present` and go to the next repository.
    - Otherwise run `GIT_TERMINAL_PROMPT=0 git clone <remote> repos/<name>`. `GIT_TERMINAL_PROMPT=0` makes a clone that needs a password fail instead of waiting for input.
    - When the command succeeds, mark it `cloned`. When it fails, mark it `failed` with the first output line that starts with `fatal:` or `error:` (the `Cloning into` line is not the error). When no line starts with `fatal:` or `error:`, use the last non-empty output line instead. Then continue with the next repository.
@@ -31,7 +32,7 @@ Running `init` again is safe: it keeps existing values and only adds what is mis
    - `command -v gh`: output means `installed`, no output means `missing`.
    - `command -v python3`: output means `installed`, no output means `missing`.
    - `grep -E '^[A-Za-z_][A-Za-z0-9_]*=$' .local/env | cut -d= -f1`: the names of empty variables. This command prints only names. Never run `cat .local/env` and never print a value.
-10. Report to the person, in this order: role; each repository from step 8 with `cloned`, `present` or `failed` and its error, and each `add` name from step 7 that is not in `repos.json` as `<name>: failed: not in repos.json`; git version; glab, gh and python3 as `installed` or `missing`; empty variables by name, or `none`; the `.local/env` permissions note from step 6.
+10. Report to the person, in this order: role; each repository from step 8 with `cloned`, `present`, `planned` or `failed` and its error, and each `add` name from step 7 that is not in `repos.json` as `<name>: failed: not in repos.json`; git version; glab, gh and python3 as `installed` or `missing`; empty variables by name, or `none`; the `.local/env` permissions note from step 6.
 11. Do not create a branch and do not commit. `init` changes only `.local/` and `repos/`, which git ignores.
 
 ## Example
@@ -60,6 +61,7 @@ Role: backend
 Repositories:
 - payments: cloned
 - ledger: present
+- risks-front: planned
 - billing-legacy: failed: fatal: could not read Username for 'https://git.example.com': terminal prompts disabled
 git: git version 2.43.0
 glab: installed

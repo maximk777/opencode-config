@@ -8,7 +8,7 @@ import path from "node:path";
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const KIT = path.join(REPO, "kits/workspace");
 const SKILLS = path.join(KIT, ".agents/skills");
-const FILE_CHANGING = ["repos-add", "work-record", "decide", "extend"];
+const FILE_CHANGING = ["repos-add", "work-record", "decide", "extend", "task-new", "task-decompose"];
 const CHECK_LINE = "check not run: python3 missing";
 
 function git(args) {
@@ -64,6 +64,30 @@ test("kit.json has name, semver version and existing templated files", () => {
   for (const entry of kit.templated) {
     assert.ok(existsSync(path.join(KIT, entry)), `templated entry missing: ${entry}`);
   }
+});
+
+test("kit contains lifecycle templates, the ui-migration profile and task skills", () => {
+  const paths = [
+    ".agents/templates/stream.json",
+    ".agents/templates/epic.md",
+    ".agents/templates/MAP.md",
+    ".agents/profiles/ui-migration/profile.json",
+    ".agents/profiles/ui-migration/screen.md",
+    ".agents/profiles/ui-migration/story.md",
+    ".agents/skills/task-new/SKILL.md",
+    ".agents/skills/task-decompose/SKILL.md",
+    ".agents/skills/task-context/SKILL.md",
+  ];
+  for (const rel of paths) {
+    assert.ok(existsSync(path.join(KIT, rel)), `kit path missing: ${rel}`);
+  }
+  const profile = JSON.parse(readFileSync(path.join(KIT, ".agents/profiles/ui-migration/profile.json"), "utf8"));
+  assert.equal(profile.name, "ui-migration");
+});
+
+test("kit version is at least 0.2.0", () => {
+  const version = JSON.parse(readFileSync(path.join(KIT, "kit.json"), "utf8")).version;
+  assert.ok(!semverGreater("0.2.0", version), `kit version ${version} is below 0.2.0`);
 });
 
 test("every kit skill has frontmatter, numbered steps and Without Python", () => {

@@ -1,0 +1,7 @@
+{
+  "key": "stream:<domain>/<stream>",
+  "profile": "ui-migration",
+  "stage": "goal",
+  "scope": [],
+  "approvals": []
+}

@@ -88,6 +88,180 @@ def recipe_rule(ws, name):
     write(ws, ".cursor/rules/%s.mdc" % name, header + source)
 
 
+SCREEN_FIELDS = ["key", "route", "kind", "section", "parent", "access", "label", "wave", "story"]
+
+
+def unquote(value):
+    return value[1:-1] if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'" else value
+
+
+def frontmatter_values(text):
+    """Frontmatter values as cell strings: verbatim scalars without surrounding quotes, lists joined with ", ", empty as ""."""
+    lines = text.split("\n")
+    close = lines.index("---", 1)
+    values, last = {}, None
+    for line in lines[1:close]:
+        if line.startswith("  - "):
+            values[last] = (values[last] + ", " if values[last] else "") + unquote(line[len("  - "):].strip())
+            continue
+        name, _, value = line.partition(":")
+        value = value.strip()
+        values[name] = "" if value == "[]" else ", ".join(unquote(v.strip()) for v in value[1:-1].split(",")) \
+            if value.startswith("[") else unquote(value)
+        last = name
+    return values
+
+
+def add_domain(ws, domain):
+    template = (ws / ".agents/templates/MAP.md").read_text(encoding="utf-8")
+    write(ws, "domains/%s/MAP.md" % domain, template.replace("<domain>", domain))
+    write(ws, "domains/%s/map/.gitkeep" % domain, "")
+
+
+def add_screen(ws, domain, slug, route, parent, wave, transitions):
+    rows = "".join("| %s | %s |\n" % t for t in transitions)
+    write(ws, "domains/%s/map/%s.md" % (domain, slug),
+          "---\nkey: screen:%s/%s\nroute: %s\nkind: place\nsection: Risks\nparent: %s\naccess: %s.read\n"
+          "label: %s\nwave: %s\nstory:\n---\n\n## Transitions\n| Action | Target |\n|---|---|\n%s"
+          % (domain, slug, route, parent, slug, slug.title(), wave, rows))
+
+
+def add_stream(ws, domain, stream, stage="goal"):
+    text = (ws / ".agents/templates/stream.json").read_text(encoding="utf-8")
+    text = text.replace("<domain>/<stream>", "%s/%s" % (domain, stream)).replace('"goal"', '"%s"' % stage)
+    write(ws, "domains/%s/streams/%s/stream.json" % (domain, stream), text)
+
+
+def add_story(ws, domain, stream, slug, wave, scope=(), unmapped=None, depends=(), tracker=""):
+    def block(field, keys):
+        return field + ":\n" + "".join("  - %s\n" % k for k in keys) if keys else field + ": []\n"
+
+    template = (ws / ".agents/profiles/ui-migration/story.md").read_text(encoding="utf-8")
+    body = template[template.index("\n---\n", 4) + len("\n---\n"):]
+    head = ("---\nkey: story:%s/%s\ntype: story\nwave: %s\ntracker:%s\n" % (domain, slug, wave, " " + tracker if tracker else "")
+            + block("scope", scope) + ("unmapped: %s\n" % unmapped if unmapped else "")
+            + block("depends", depends) + "repos: []\ndecisions: []\nmockups: []\n---\n")
+    write(ws, "domains/%s/streams/%s/stories/%s/story.md" % (domain, stream, slug), head + body)
+
+
+def set_screen_story(ws, domain, slug, story_key):
+    rel = "domains/%s/map/%s.md" % (domain, slug)
+    text = (ws / rel).read_text(encoding="utf-8")
+    assert text.count("\nstory:\n") == 1
+    write(ws, rel, text.replace("\nstory:\n", "\nstory: %s\n" % story_key))
+
+
+def _block_bounds(lines, name):
+    return lines.index("<!-- map:%s:begin -->" % name), lines.index("<!-- map:%s:end -->" % name)
+
+
+def _row_file_name(row):
+    # A row's element file name comes from its first cell, the key `screen:<domain>/<slug>`.
+    return row.split(" | ", 1)[0][len("| "):].split("/", 1)[1] + ".md"
+
+
+def recipe_map_element(ws, domain, slug):
+    """### Recipe: map element in .agents/skills/extend/SKILL.md, step 5."""
+    rel = "domains/%s/MAP.md" % domain
+    source = (ws / ("domains/%s/map/%s.md" % (domain, slug))).read_text(encoding="utf-8")
+    values = frontmatter_values(source)
+    new_name = slug + ".md"
+    screen_row = "| " + " | ".join(values.get(f, "") for f in SCREEN_FIELDS) + " |"
+    table = source.split("## Transitions\n", 1)[1].split("\n")[2:]
+    transition_rows = ["| %s | %s |" % (values["key"], " | ".join(c.strip() for c in line.strip("|").split("|")))
+                       for line in table if line.startswith("|")]
+    headers = {
+        "screens": ["| " + " | ".join(SCREEN_FIELDS) + " |", "|" + "---|" * len(SCREEN_FIELDS)],
+        "transitions": ["| From | Action | Target |", "|---|---|---|"],
+    }
+    lines = (ws / rel).read_text(encoding="utf-8").split("\n")
+    for name, new_rows in (("screens", [screen_row]), ("transitions", transition_rows)):
+        begin, end = _block_bounds(lines, name)
+        if end == begin + 1:
+            lines[end:end] = headers[name]
+            end += 2
+        pos = next((i for i in range(begin + 3, end) if _row_file_name(lines[i]) > new_name), end)
+        lines[pos:pos] = new_rows
+    write(ws, rel, "\n".join(lines))
+
+
+def recipe_story_cell(ws, domain, element_key, story_key):
+    """The MAP.md story cell change of step 14 in .agents/skills/task-new/SKILL.md."""
+    rel = "domains/%s/MAP.md" % domain
+    lines = (ws / rel).read_text(encoding="utf-8").split("\n")
+    begin, end = _block_bounds(lines, "screens")
+    column = [c.strip() for c in lines[begin + 1].strip("|").split("|")].index("story")
+    row = next(i for i in range(begin + 3, end) if lines[i].startswith("| %s |" % element_key))
+    cells = lines[row].split("|")
+    assert cells[column + 1] == "  "
+    cells[column + 1] = " %s " % story_key
+    lines[row] = "|".join(cells)
+    write(ws, rel, "\n".join(lines))
+
+
+def recipe_breakdown_row(ws, domain, stream, slug):
+    """## Recipe: BREAKDOWN.md row in .agents/skills/task-new/SKILL.md."""
+    values = frontmatter_values(
+        (ws / ("domains/%s/streams/%s/stories/%s/story.md" % (domain, stream, slug))).read_text(encoding="utf-8"))
+    row = "| story:%s/%s | %s |" % (domain, slug, " | ".join(
+        values.get(f, "") for f in ("wave", "scope", "unmapped", "tracker", "depends")))
+    rel = "domains/%s/streams/%s/BREAKDOWN.md" % (domain, stream)
+    path = ws / rel
+    if not path.exists():
+        write(ws, rel, "# Breakdown of stream:%s/%s\n\nGenerated by tools/generate.py from stories/*/story.md. "
+                       "Do not edit.\n\n| Story | Wave | Scope | Unmapped | Tracker | Depends |\n"
+                       "|---|---|---|---|---|---|\n" % (domain, stream))
+    lines = path.read_text(encoding="utf-8").split("\n")
+    separator = lines.index("|---|---|---|---|---|---|")
+    # The skill's order (`-`, digits, letters) equals code point order for slug characters.
+    pos = next((i for i in range(separator + 1, len(lines))
+                if lines[i].startswith("| story:") and lines[i].split(" | ", 1)[0].split("/", 1)[1] > slug), None)
+    if pos is None:
+        lines[-1:] = [row, ""]
+    else:
+        lines.insert(pos, row)
+    write(ws, rel, "\n".join(lines))
+
+
+def _insert_index_line(lines, pos, entry):
+    before = lines[pos - 1]
+    if before.startswith("  ") and not before.endswith(","):
+        lines[pos - 1] = before + ","
+    lines.insert(pos, entry + ("," if lines[pos] != "}" else ""))
+
+
+def recipe_story_index(ws, domain, stream, slug):
+    """## Recipe: index entry in .agents/skills/task-new/SKILL.md."""
+    rel = ".agents/index.json"
+    path = "domains/%s/streams/%s/stories/%s/story.md" % (domain, stream, slug)
+    tracker = frontmatter_values((ws / path).read_text(encoding="utf-8")).get("tracker", "")
+    key = "story:%s/%s" % (domain, slug)
+    line = '  "%s": "%s"' % (key, path)
+    text = (ws / rel).read_text(encoding="utf-8")
+    if text == "{}\n":
+        lines = ["{", line, "}", ""]
+    else:
+        lines = text.split("\n")
+        stories = [i for i, l in enumerate(lines) if l.startswith('  "story:')]
+        others = [i for i, l in enumerate(lines) if l.startswith(('  "adr:', '  "diagram:', '  "mockup:'))]
+        if stories:
+            pos = next((i for i in stories if lines[i][len('  "'):].split('"', 1)[0] > key), stories[-1] + 1)
+        elif others:
+            pos = others[-1] + 1
+        else:
+            pos = lines.index("{") + 1
+        _insert_index_line(lines, pos, line)
+    if tracker:
+        escaped = tracker.replace("\\", "\\\\").replace('"', '\\"')
+        last_story = max(i for i, l in enumerate(lines) if l.startswith('  "story:'))
+        close = lines.index("}")
+        trackers = range(last_story + 1, close)
+        assert not any(lines[i].startswith('  "%s":' % escaped) for i in trackers)
+        pos = next((i for i in trackers if lines[i][len('  "'):].split('"', 1)[0] > escaped), close)
+        _insert_index_line(lines, pos, '  "%s": "%s"' % (escaped, path))
+    write(ws, rel, "\n".join(lines))
+
+
 class Recipes(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -157,6 +331,115 @@ class Recipes(unittest.TestCase):
         for ws in self.both:
             write(ws, ".agents/rules/sql-style.md", "# SQL style\n\n- Write SQL keywords in upper case.\n")
         recipe_rule(self.recipe, "sql-style")
+        self.assertSameTrees()
+
+    def test_map_element_into_empty_map(self):
+        for ws in self.both:
+            add_domain(ws, "risks")
+            add_screen(ws, "risks", "overview", "/risks", "", 1, [("Open alerts", "screen:risks/alerts")])
+        recipe_map_element(self.recipe, "risks", "overview")
+        self.assertSameTrees()
+
+    def test_map_element_before_existing_with_two_transitions(self):
+        for ws in self.both:
+            add_domain(ws, "risks")
+            add_screen(ws, "risks", "limit", "/risks/limit", "", 1, [("Open card", "screen:risks/limit-card")])
+            self.generate(ws)
+            # limit-card.md sorts before limit.md ("-" < "."), although its key sorts after.
+            add_screen(ws, "risks", "limit-card", "/risks/limit/card", "screen:risks/limit", 2,
+                       [("Back", "screen:risks/limit"), ("Show alerts", "screen:risks/alerts")])
+        recipe_map_element(self.recipe, "risks", "limit-card")
+        self.assertSameTrees()
+
+    def test_story_into_empty_breakdown(self):
+        for ws in self.both:
+            add_stream(ws, "operations", "migration")
+            self.generate(ws)
+            add_story(ws, "operations", "migration", "bff-defects", 3, unmapped="BFF returns wrong totals")
+        recipe_breakdown_row(self.recipe, "operations", "migration", "bff-defects")
+        recipe_story_index(self.recipe, "operations", "migration", "bff-defects")
+        self.assertSameTrees()
+
+    def test_story_into_non_empty_breakdown(self):
+        for ws in self.both:
+            add_stream(ws, "operations", "migration")
+            add_story(ws, "operations", "migration", "login", 1, scope=["screen:operations/login"])
+            add_story(ws, "operations", "migration", "users", 2,
+                      scope=["screen:operations/users", "screen:operations/user-view"],
+                      depends=["story:operations/login"])
+            self.generate(ws)
+            add_story(ws, "operations", "migration", "reports", 2, scope=["screen:operations/reports"],
+                      depends=["story:operations/login"])
+        recipe_breakdown_row(self.recipe, "operations", "migration", "reports")
+        recipe_story_index(self.recipe, "operations", "migration", "reports")
+        self.assertSameTrees()
+
+    def test_story_creates_missing_breakdown(self):
+        for ws in self.both:
+            add_stream(ws, "operations", "migration")
+            add_story(ws, "operations", "migration", "login", 1, scope=["screen:operations/login"])
+        self.assertFalse((self.recipe / "domains/operations/streams/migration/BREAKDOWN.md").exists())
+        recipe_breakdown_row(self.recipe, "operations", "migration", "login")
+        recipe_story_index(self.recipe, "operations", "migration", "login")
+        self.assertSameTrees()
+
+    def test_story_with_quoted_values(self):
+        for ws in self.both:
+            add_stream(ws, "operations", "migration")
+            self.generate(ws)
+            add_story(ws, "operations", "migration", "reports", 2, scope=["screen:operations/reports"],
+                      tracker="TASK-12")
+            rel = "domains/operations/streams/migration/stories/reports/story.md"
+            text = (ws / rel).read_text(encoding="utf-8")
+            text = text.replace("wave: 2\n", 'wave: "2"\n').replace("tracker: TASK-12\n", "tracker: 'TASK-12'\n")
+            write(ws, rel, text.replace("  - screen:operations/reports\n", '  - "screen:operations/reports"\n'))
+        recipe_breakdown_row(self.recipe, "operations", "migration", "reports")
+        recipe_story_index(self.recipe, "operations", "migration", "reports")
+        self.assertSameTrees()
+
+    def _index_with_adr_and_mockup(self, ws):
+        write(ws, "docs/adr/0001-use-kafka.md", "# ADR-0001: Use Kafka\n")
+        write(ws, "docs/diagrams/external.json", json.dumps(
+            {"diagrams": [{"key": "mockup:operations/login", "url": "https://design.example.org/file/login"}]},
+            indent=2) + "\n")
+
+    def test_story_index_entry_without_tracker(self):
+        for ws in self.both:
+            self._index_with_adr_and_mockup(ws)
+            add_stream(ws, "operations", "migration")
+            self.generate(ws)
+            add_story(ws, "operations", "migration", "reports", 2, scope=["screen:operations/reports"])
+        recipe_breakdown_row(self.recipe, "operations", "migration", "reports")
+        recipe_story_index(self.recipe, "operations", "migration", "reports")
+        self.assertSameTrees()
+
+    def test_story_index_entry_with_tracker(self):
+        for ws in self.both:
+            self._index_with_adr_and_mockup(ws)
+            add_stream(ws, "operations", "migration", stage="delivery")
+            add_story(ws, "operations", "migration", "users", 1, scope=["screen:operations/users"], tracker="TASK-9")
+            self.generate(ws)
+            # TASK-12 sorts before TASK-9 by characters, so both new lines go above the existing ones.
+            add_story(ws, "operations", "migration", "reports", 2, scope=["screen:operations/reports"],
+                      tracker="TASK-12")
+        recipe_breakdown_row(self.recipe, "operations", "migration", "reports")
+        recipe_story_index(self.recipe, "operations", "migration", "reports")
+        self.assertIn('  "TASK-12": "domains/operations/streams/migration/stories/reports/story.md",\n',
+                      (self.recipe / ".agents/index.json").read_text(encoding="utf-8"))
+        self.assertSameTrees()
+
+    def test_story_cell_in_map(self):
+        for ws in self.both:
+            add_domain(ws, "operations")
+            add_screen(ws, "operations", "reports", "/reports", "", 2, [])
+            add_screen(ws, "operations", "users", "/users", "", 1, [])
+            add_stream(ws, "operations", "migration")
+            self.generate(ws)
+            add_story(ws, "operations", "migration", "reports", 2, scope=["screen:operations/reports"])
+            set_screen_story(ws, "operations", "reports", "story:operations/reports")
+        recipe_breakdown_row(self.recipe, "operations", "migration", "reports")
+        recipe_story_index(self.recipe, "operations", "migration", "reports")
+        recipe_story_cell(self.recipe, "operations", "screen:operations/reports", "story:operations/reports")
         self.assertSameTrees()
 
 

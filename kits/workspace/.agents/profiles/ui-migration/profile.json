@@ -1,0 +1,149 @@
+{
+  "name": "ui-migration",
+  "elements": [
+    {
+      "kind": "screen",
+      "prefix": "screen",
+      "dir": "map",
+      "fields": [
+        "key",
+        "route",
+        "kind",
+        "section",
+        "parent",
+        "access",
+        "label",
+        "wave",
+        "story"
+      ],
+      "may_be_empty": [
+        "parent",
+        "story"
+      ],
+      "values": {
+        "kind": [
+          "place"
+        ]
+      },
+      "tables": [
+        {
+          "heading": "Transitions",
+          "columns": [
+            "Action",
+            "Target"
+          ],
+          "keys": [
+            "Target"
+          ]
+        }
+      ]
+    }
+  ],
+  "story": {
+    "fields": [
+      "key",
+      "type",
+      "wave",
+      "tracker",
+      "scope",
+      "depends",
+      "repos",
+      "decisions",
+      "mockups"
+    ],
+    "may_be_empty": [
+      "tracker",
+      "scope",
+      "depends",
+      "repos",
+      "decisions",
+      "mockups"
+    ],
+    "values": {
+      "type": [
+        "story"
+      ]
+    },
+    "sections": [
+      "Goal",
+      "Scope",
+      "Acceptance criteria",
+      "Verification",
+      "Out of scope",
+      "Open questions"
+    ]
+  },
+  "epic": {
+    "sections": [
+      "Goal",
+      "Scope",
+      "Success criteria",
+      "Out of scope",
+      "Open questions",
+      "Target users",
+      "Product"
+    ]
+  },
+  "map_doc": {
+    "tables": [
+      {
+        "heading": "Legacy trace",
+        "columns": [
+          "Legacy group",
+          "Legacy item",
+          "Legacy route",
+          "Target"
+        ],
+        "target": "Target"
+      }
+    ]
+  },
+  "stages": {
+    "goal": [
+      {
+        "gate": "epic_sections"
+      },
+      {
+        "gate": "approval"
+      }
+    ],
+    "map": [
+      {
+        "gate": "unique_keys"
+      },
+      {
+        "gate": "no_dangling_targets"
+      },
+      {
+        "gate": "legacy_traced",
+        "table": "Legacy trace"
+      },
+      {
+        "gate": "approval"
+      }
+    ],
+    "decomposition": [
+      {
+        "gate": "two_way_coverage"
+      },
+      {
+        "gate": "approval"
+      }
+    ],
+    "ready": [
+      {
+        "gate": "tracker_ids"
+      },
+      {
+        "gate": "no_open_questions",
+        "section": "Open questions"
+      }
+    ],
+    "delivery": [],
+    "done": [
+      {
+        "gate": "work_records"
+      }
+    ]
+  }
+}
