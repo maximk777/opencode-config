@@ -16,6 +16,12 @@ FIXTURES = REPO / "smoke/workspace"
 RESULTS = REPO / "smoke/WORKSPACE-RESULTS.md"
 IDENTITY = ["-c", "user.name=smoke", "-c", "user.email=smoke@example.com"]
 SHIM_NAMES = ["python", "python3"] + [f"python3.{minor}" for minor in range(9, 15)]
+DEMO = "demo"
+STREAM = "stream:demo/main"
+LIST_SCREEN = "screen:demo/list"
+CARD_SCREEN = "screen:demo/card"
+STORY_BRANCH = "story-demo-card"
+UNCOVERED_RE = re.compile(r"scope key (\S+) is in no story's scope")
 
 
 def run(cmd, cwd=None, env=None, check=True):
@@ -85,6 +91,77 @@ def shim(run_dir):
     return directory
 
 
+def write(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def screen(slug, route, label, story, transitions):
+    rows = "".join(f"| {action} | {target} |\n" for action, target in transitions)
+    return (
+        f"---\nkey: screen:{DEMO}/{slug}\nroute: {route}\nkind: place\nsection: Demo\nparent:\n"
+        f"access: demo.{slug}\nlabel: {label}\nwave: 1\nstory: {story}\n---\n\n"
+        f"## Transitions\n| Action | Target |\n|---|---|\n{rows}"
+    )
+
+
+def demo_stream(owner):
+    """Add domain demo with two screens and stream main at decomposition whose one story covers only the first screen."""
+    domain = owner / "domains" / DEMO
+    readme = (owner / ".agents/templates/domain/README.md").read_text(encoding="utf-8")
+    write(domain / "README.md", readme.replace("<name>", DEMO))
+    map_doc = (owner / ".agents/templates/MAP.md").read_text(encoding="utf-8").replace("<domain>", DEMO)
+    header = "| Legacy group | Legacy item | Legacy route | Target |\n|---|---|---|---|\n"
+    if header not in map_doc:
+        print("workspace-smoke: MAP.md template has no Legacy trace table", file=sys.stderr)
+        sys.exit(2)
+    write(domain / "MAP.md", map_doc.replace(header, header + f"| Demo | List | /list | {LIST_SCREEN} |\n"))
+    write(domain / "map/list.md", screen("list", "/list", "List", f"story:{DEMO}/list", [("open row", CARD_SCREEN)]))
+    write(domain / "map/card.md", screen("card", "/card", "Card", "", []))
+
+    stream = domain / "streams/main"
+    today = datetime.date.today().isoformat()
+    data = {
+        "key": STREAM,
+        "profile": "ui-migration",
+        "stage": "decomposition",
+        "scope": [LIST_SCREEN, CARD_SCREEN],
+        "approvals": [{"stage": stage, "by": "smoke", "date": today} for stage in ("goal", "map")],
+    }
+    write(stream / "stream.json", json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    write(stream / "epic.md", (
+        "# Demo migration\n\n"
+        "## Goal\nMove the demo list and card screens to the new UI.\n\n"
+        f"## Scope\n{LIST_SCREEN}, {CARD_SCREEN}.\n\n"
+        "## Success criteria\nBoth screens open in the new UI with the legacy behaviour.\n\n"
+        "## Out of scope\nNew features.\n\n"
+        "## Open questions\nNone.\n\n"
+        "## Target users\nDemo operators.\n\n"
+        "## Product\nThe demo BFF.\n"
+    ))
+    write(stream / "stories/list/story.md", (
+        f"---\nkey: story:{DEMO}/list\ntype: story\nwave: 1\ntracker:\nscope:\n  - {LIST_SCREEN}\n"
+        "depends: []\nrepos: []\ndecisions: []\nmockups: []\n---\n\n"
+        "## Goal\nThe list screen works in the new UI.\n\n"
+        f"## Scope\n{LIST_SCREEN}\n\n"
+        "## Acceptance criteria\nThe list shows the legacy rows and a row opens the card.\n\n"
+        "## Verification\nOpen /list on the test stand and open a row.\n\n"
+        "## Out of scope\nThe card screen.\n\n"
+        "## Open questions\nNone.\n"
+    ))
+
+
+def uncovered(clone):
+    """Run check.py --remaining in clone; return (exit code, output, two_way_coverage lines of the fixture stream)."""
+    result = run([sys.executable, "tools/check.py", "--remaining"], cwd=clone, check=False)
+    output = (result.stdout + result.stderr).strip()
+    lines = [
+        line for line in result.stdout.splitlines()
+        if line.startswith(f"{STREAM} ") and " two_way_coverage: " in line
+    ]
+    return result.returncode, output, lines
+
+
 def workspace(run_dir):
     owner = run_dir / "owner"
     run([
@@ -106,6 +183,7 @@ def workspace(run_dir):
         "summary": "Demo BFF",
     })
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    demo_stream(owner)
     run([sys.executable, "tools/generate.py"], cwd=owner)
     git(owner, "init", "-q", "-b", "main")
     git(owner, "add", "-A")
@@ -226,7 +304,7 @@ def prompts(run_dir, person, shim_dir, config_dir, model, timeout, failures):
     texts = json.loads((FIXTURES / "prompts.json").read_text(encoding="utf-8"))
     env = opencode_env(run_dir, shim_dir, config_dir, person)
     remote = f"file://{run_dir / 'remotes/payments-worker.git'}"
-    for n, key in enumerate(["init", "repos_add", "work_record"], start=1):
+    for n, key in enumerate(["init", "repos_add", "work_record", "story"], start=1):
         prompt = texts[key].replace("{remote}", remote)
         cmd = ["opencode", "run", "--agent", "build", "--model", model, "--format", "json", "--dir", str(person), prompt]
         events = run_dir / f"events-{n}.jsonl"
@@ -262,7 +340,7 @@ def verify(run_dir, person, sha, failures, outputs):
     if not (person / "repos/demo-bff/.git").exists():
         failures.append("repos/demo-bff is not cloned")
     refs = run(["git", "ls-remote", str(run_dir / "remotes/workspace.git")], check=False).stdout
-    branches = ["repos-add-payments-worker", "work/TASK-1"]
+    branches = ["repos-add-payments-worker", "work/TASK-1", STORY_BRANCH]
     for n, branch in enumerate(branches, start=1):
         if f"refs/heads/{branch}" not in refs.split():
             failures.append(f"branch {branch} was not pushed")
@@ -279,6 +357,16 @@ def verify(run_dir, person, sha, failures, outputs):
                 failures.append("work/TASK-1/record.md is missing")
             elif sha not in text:
                 failures.append(f"work/TASK-1/record.md does not contain the fixture commit {sha}")
+        if branch == STORY_BRANCH and clone is not None:
+            remaining_code, remaining_output, lines = uncovered(clone)
+            if remaining_output:
+                outputs.append((f"check.py --remaining on {branch}", remaining_output))
+            if remaining_code != 0:
+                failures.append(f"check.py --remaining on {branch} exited {remaining_code}")
+            for line in lines:
+                match = UNCOVERED_RE.search(line)
+                failures.append(f"{branch} leaves {match.group(1)} uncovered" if match
+                                else f"{branch} fails two_way_coverage: {line}")
 
 
 def append_result(model, failures, outputs):
@@ -310,8 +398,21 @@ def main():
     workspace(run_dir)
 
     failures, outputs = [], []
-    code, output, _ = clone_and_check(run_dir, "verify-main")
+    code, output, clone = clone_and_check(run_dir, "verify-main")
     if code == 0:
+        remaining_code, remaining_output, lines = uncovered(clone)
+        match = UNCOVERED_RE.search(lines[0]) if len(lines) == 1 else None
+        if remaining_code != 0 or len(lines) != 1 or not match or match.group(1) != CARD_SCREEN:
+            print(f"SETUP FAIL check.py --remaining exited {remaining_code}, "
+                  f"expected exactly one two_way_coverage line naming {CARD_SCREEN}")
+            print(remaining_output)
+            if args.setup_only:
+                return 1
+            failures.append(f"check.py --remaining on a fresh clone of main did not name exactly {CARD_SCREEN}")
+            outputs.append(("check.py --remaining on main", remaining_output))
+            append_result(args.model, failures, outputs)
+            print("WORKSPACE SMOKE FAIL")
+            return 1
         print("SETUP PASS")
     else:
         print(f"SETUP FAIL check exited {code}")
