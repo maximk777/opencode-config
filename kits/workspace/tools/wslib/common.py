@@ -211,6 +211,9 @@ class Context:
             return json.loads(text), None
         except json.JSONDecodeError as e:
             return None, Finding(rel, e.lineno, "json-shape", str(e))
+        except (RecursionError, ValueError) as e:
+            # Very deep nesting or over-long integers are rejected by the parser itself, without a line.
+            return None, Finding(rel, 1, "json-shape", str(e))
 
     def kit_params(self) -> dict:
         data, _ = self.load_json(".agents/kit.json")

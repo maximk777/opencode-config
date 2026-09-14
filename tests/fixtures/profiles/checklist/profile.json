@@ -1,0 +1,29 @@
+{
+  "name": "checklist",
+  "elements": [
+    {
+      "kind": "rule",
+      "prefix": "rule",
+      "dir": "rules",
+      "fields": ["key", "owner", "story"],
+      "may_be_empty": ["story"],
+      "tables": [{"heading": "Checks", "columns": ["Check", "Target"], "keys": ["Target"]}]
+    }
+  ],
+  "story": {
+    "fields": ["key", "type", "scope", "tracker"],
+    "may_be_empty": ["tracker", "scope"],
+    "values": {"type": ["story"]},
+    "sections": ["Goal", "Open questions"]
+  },
+  "epic": {"sections": ["Goal"]},
+  "map_doc": {"tables": []},
+  "stages": {
+    "goal": [{"gate": "epic_sections"}, {"gate": "approval"}],
+    "map": [{"gate": "unique_keys"}, {"gate": "no_dangling_targets"}, {"gate": "approval"}],
+    "decomposition": [{"gate": "two_way_coverage"}, {"gate": "approval"}],
+    "ready": [{"gate": "tracker_ids"}, {"gate": "no_open_questions", "section": "Open questions"}],
+    "delivery": [],
+    "done": []
+  }
+}
