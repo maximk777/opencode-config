@@ -389,7 +389,7 @@ Tier-файлы — единственное место назначения м�
 - глобальный `commit-msg` хук;
 - tier `deep` для архитектора;
 - Serena, Playwright, actionbook, context7, basic-memory, плагин superpowers;
-- жизненный цикл стримов и профили, трекер и статус, normalize и repo-kits для workspace builder — следующие изменения workspace-lifecycle, workspace-tracker-status, workspace-normalize.
+- трекер и статус, normalize и repo-kits для workspace builder: следующие изменения workspace-tracker-status и workspace-normalize.
 
 ## 13. Отвергнутые варианты
 
@@ -449,7 +449,13 @@ CI в ядро не входит. Для работы без Python в скил�
 
 Тесты: `tests/test_workspace_*.py`, `tests/workspace-kit.test.mjs` и `bin/workspace-py39`, который гоняет тесты скриптов workspace в Docker-образе `python:3.9`. Приёмочный прогон `bin/workspace-smoke` пишет результаты в `smoke/WORKSPACE-RESULTS.md`.
 
-Следующие изменения: `workspace-lifecycle` (жизненный цикл стримов и профили), `workspace-tracker-status` (трекер и статус), `workspace-normalize` (normalize и repo-kits).
+Стримы. Стрим лежит в `domains/<domain>/streams/<stream>/`: `stream.json` (профиль, стадия, scope, отметки одобрения), `epic.md`, истории `stories/<slug>/story.md`, ручной `MOCKUPS.md` и сгенерированный `BREAKDOWN.md`. Стадии идут по одной: goal → map → decomposition → ready → delivery → done. Стадию меняет design merge request: он ставит новый `stage` и добавляет отметку `{stage, by, date}` для закрываемой стадии, мёрджит его ревьюер. Карта домена состоит из элементов `domains/<domain>/map/<slug>.md` и `domains/<domain>/MAP.md`; в `MAP.md` таблицы экранов и переходов генерируются между маркерами, остальное, включая таблицу `Legacy trace`, пишется руками.
+
+Профили. Профиль задаётся данными, а не кодом: `.agents/profiles/<name>/profile.json` описывает виды элементов, обязательные поля, таблицы, разделы историй и гейты каждой стадии. Гейт называет предикат ядра с параметрами: `approval`, `epic_sections`, `unique_keys`, `two_way_coverage`, `no_dangling_targets`, `legacy_traced`, `tracker_ids`, `no_open_questions`, `work_records`. Новому профилю код не нужен, новому виду гейта нужны код ядра и новая версия кита. В кит входит профиль `ui-migration` в формате PoC operations-map: экраны с таблицей `Transitions`, истории с frontmatter из PoC и трасса legacy в `MAP.md`.
+
+`tools/check.py` проверяет гейты всех закрытых стадий; отметка одобрения нужна только закрытым стадиям goal, map и decomposition, где в профиле есть гейт `approval`, а у ready, delivery и done такого гейта нет. Гейт текущей стадии показывает `python3 tools/check.py --remaining`, команда всегда завершается с кодом 0. Скиллы: `task-new` создаёт историю из шаблона профиля, `task-decompose` предлагает по истории на каждый экран scope без истории и заканчивается merge request с отметкой decomposition, `task-context` собирает контекст по ключу или id трекера через `.agents/index.json`. `extend` умеет виды `stream` и `map-element`.
+
+Следующие изменения: `workspace-tracker-status` (трекер, статус и часть гейта done про смёрдженные merge request), `workspace-normalize` (normalize и repo-kits).
 
 ## 14. Источники
 
