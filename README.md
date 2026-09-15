@@ -12,6 +12,14 @@ An [OpenCode](https://opencode.ai) configuration: a change-flow orchestrator, sk
 
 ## Installation
 
+Bootstrap a fresh macOS laptop in one command — installs missing deps (Homebrew, node, python, Docker Desktop, Ollama, opencode), creates a private OpenViking with its own keys, asks for the account name and provider tokens, installs the launch agents:
+
+```sh
+bin/bootstrap
+```
+
+The pieces it runs, also usable on their own:
+
 Link the skills, agents and rules into [Claude Code](https://claude.com/claude-code):
 
 ```sh

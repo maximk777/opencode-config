@@ -1,0 +1,271 @@
+#!/usr/bin/env bash
+# Bootstraps a fresh laptop: system deps, npm install, a private OpenViking with its own
+# root/user keys, launchd agents and the Claude Code link. Idempotent: rerun is safe.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+OV_DIR="$HOME/.openviking"
+ENV_FILE="$OV_DIR/.env"
+KEY_RE='[A-Za-z0-9+/=]{2,}\.[A-Za-z0-9+/=]{2,}\.[0-9a-f]{40,}'
+
+step() { printf '\n== %s\n' "$1"; }
+die() { printf 'bootstrap: %s\n' "$1" >&2; exit 1; }
+set_env_key() { # file key value: rewrite one KEY= line, keep the rest
+  umask 077
+  python3 - "$1" "$2" "$3" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+lines = path.read_text().splitlines()
+for i, line in enumerate(lines):
+    if line.startswith(sys.argv[2] + "="):
+        lines[i] = sys.argv[2] + "=" + sys.argv[3]
+        break
+else:
+    lines.append(sys.argv[2] + "=" + sys.argv[3])
+path.write_text("\n".join(lines) + "\n")
+PY
+}
+
+step "system deps"
+have() { command -v "$1" >/dev/null 2>&1; }
+wait_http() { # url timeout_seconds: wait until the port answers with any http code
+  local i=0
+  while [ "$i" -lt "$2" ]; do
+    [ "$(curl -s -o /dev/null -w '%{http_code}' "$1" || true)" != "000" ] && return 0
+    sleep 2
+    i=$((i + 4))
+  done
+  return 1
+}
+
+have curl || die "curl not found (macOS ships it)"
+have git || die "git not found, install git"
+
+if ! have brew; then
+  [ "$(uname -s)" = "Darwin" ] || die "brew missing and this setup is macOS-specific"
+  echo "installing Homebrew"
+  NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
+    || die "Homebrew install failed"
+  # Apple Silicon; Intel brew lives in /usr/local which is already on PATH.
+  [ -x /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"
+  have brew || die "brew is still not on PATH after install"
+fi
+
+if ! have node; then
+  echo "installing node (brew)"
+  brew install --formula node
+fi
+if ! have python3; then
+  echo "installing python (brew)"
+  brew install --formula python
+fi
+if ! have docker; then
+  echo "installing Docker Desktop (brew cask)"
+  brew install --cask docker
+fi
+if ! docker info >/dev/null 2>&1; then
+  echo "starting Docker Desktop"
+  open -a Docker || die "Docker.app is missing after cask install"
+  i=0
+  until docker info >/dev/null 2>&1; do
+    [ "$i" -ge 90 ] && die "docker daemon did not come up in 180s"
+    sleep 2
+    i=$((i + 2))
+  done
+fi
+if ! have ollama; then
+  echo "installing Ollama (brew cask)"
+  brew install --cask ollama
+  hash -r
+fi
+if ! curl -s -o /dev/null http://127.0.0.1:11434; then
+  echo "starting Ollama"
+  open -a Ollama || die "Ollama.app is missing after cask install"
+  wait_http http://127.0.0.1:11434 60 || die "ollama server did not come up on 11434"
+fi
+echo "pulling the embedding model bge-m3 (about 1.2 GB on the first run)"
+ollama pull bge-m3 >/dev/null || die "ollama pull bge-m3 failed"
+if ! have opencode; then
+  echo "installing opencode (official installer)"
+  curl -fsSL https://opencode.ai/install | bash
+  export PATH="$HOME/.opencode/bin:$PATH"
+  have opencode || die "opencode is still not on PATH after install"
+fi
+
+step "npm install"
+(cd "$REPO" && npm install --no-fund --no-audit)
+
+step "account name"
+# The name survives reruns in $ENV_FILE; the first run may also inherit it from an
+# existing ovcli.conf.local, otherwise it asks with maxim as the default.
+account="${OV_ACCOUNT:-}"
+if [ -z "$account" ] && [ -f "$ENV_FILE" ]; then
+  account="$(grep -E '^ACCOUNT=' "$ENV_FILE" | cut -d= -f2- || true)"
+fi
+if [ -z "$account" ] && [ -f "$OV_DIR/ovcli.conf.local" ]; then
+  account="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("account",""))' \
+    "$OV_DIR/ovcli.conf.local" 2>/dev/null || true)"
+fi
+if [ -z "$account" ]; then
+  printf 'Account name [maxim]: '
+  read -r account
+  account="${account:-maxim}"
+fi
+case "$account" in
+  "" | *[!a-zA-Z0-9_-]*) die "invalid account name: $account" ;;
+esac
+echo "account: $account"
+
+step "private OpenViking state ($OV_DIR)"
+mkdir -p "$OV_DIR" "$HOME/specs"
+if [ -f "$ENV_FILE" ]; then
+  echo "keeping existing $ENV_FILE"
+  if ! grep -qE '^ACCOUNT=' "$ENV_FILE"; then
+    umask 077
+    printf 'ACCOUNT=%s\n' "$account" >> "$ENV_FILE"
+  fi
+else
+  root_key="$(openssl rand -hex 32)"
+  printf 'DEEPSEEK_API_KEY (input hidden, used by ov.conf vlm): '
+  read -rs deepseek_key
+  echo
+  [ -n "$deepseek_key" ] || die "DEEPSEEK_API_KEY is required by openviking/ov.conf.template"
+  umask 077
+  cat > "$ENV_FILE" <<EOF
+ACCOUNT=$account
+OPENVIKING_ROOT_KEY=$root_key
+OPENVIKING_API_KEY=
+DEEPSEEK_API_KEY=$deepseek_key
+EOF
+  unset root_key deepseek_key
+  echo "wrote $ENV_FILE with a fresh root key"
+fi
+
+step "provider tokens"
+deepseek_key="$(grep -E '^DEEPSEEK_API_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '"'"'"'')"
+if [ -n "$deepseek_key" ]; then
+  echo "keeping the existing DEEPSEEK_API_KEY for OpenViking vlm"
+else
+  printf 'DEEPSEEK_API_KEY for OpenViking vlm (input hidden): '
+  read -rs deepseek_key
+  echo
+  [ -n "$deepseek_key" ] || die "DEEPSEEK_API_KEY is required by openviking/ov.conf.template"
+  set_env_key "$ENV_FILE" DEEPSEEK_API_KEY "$deepseek_key"
+  unset deepseek_key
+  echo "DEEPSEEK_API_KEY saved to $ENV_FILE"
+fi
+auth_file="$HOME/.local/share/opencode/auth.json"
+zai_key="$(python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)) if p and __import__("os").path.exists(p) else {}; print((d.get("zai-coding-plan") or {}).get("key",""))' "$auth_file" 2>/dev/null || true)"
+if [ -n "$zai_key" ]; then
+  echo "keeping the existing GLM (zai-coding-plan) key"
+else
+  printf 'GLM token for opencode, z.ai coding plan (input hidden): '
+  read -rs glm_key
+  echo
+  if [ -n "$glm_key" ]; then
+    umask 077
+    python3 - "$auth_file" "$glm_key" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+data = json.loads(path.read_text()) if path.exists() else {}
+entry = data.get("zai-coding-plan") or {}
+entry.update({"type": "api", "key": sys.argv[2]})
+data["zai-coding-plan"] = entry
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(data, indent=2) + "\n")
+path.chmod(0o600)
+PY
+    unset glm_key
+    echo "GLM key saved to $auth_file"
+  else
+    echo "no GLM token entered, skip (opencode auth login can add it later)"
+  fi
+fi
+
+step "ov-up: render config, ollama pull, docker compose, launchd agents"
+"$REPO/bin/ov-up"
+
+step "waiting for OpenViking on 127.0.0.1:1933"
+code="000"
+for _ in $(seq 1 60); do
+  code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:1933/api/v1/system/status || true)"
+  [ "$code" != "000" ] && break
+  sleep 2
+done
+[ "$code" != "000" ] || die "server did not come up on 127.0.0.1:1933"
+echo "server is up (HTTP $code)"
+
+# --sudo resolves the root key from the active CLI config, so a root-keyed "local"
+# config is installed first and the user key is captured from the command output.
+step "admin account"
+docker exec openviking ov language en >/dev/null
+root_key="$(grep -E '^OPENVIKING_ROOT_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '"'"'"'')"
+[ -n "$root_key" ] || die "OPENVIKING_ROOT_KEY missing in $ENV_FILE"
+# Root-keyed requests must carry explicit account/user headers, so the local config
+# names the admin from the start; if --activate validation cannot probe yet
+# (fresh server, no account), a plain switch still makes it active.
+if ! printf '%s' "$root_key" | docker exec -i openviking ov config add custom \
+    --name local --url http://127.0.0.1:1933 --root-api-key-stdin \
+    --account "$account" --user "$account" --activate --force >/dev/null 2>&1; then
+  printf '%s' "$root_key" | docker exec -i openviking ov config add custom \
+    --name local --url http://127.0.0.1:1933 --root-api-key-stdin \
+    --account "$account" --user "$account" --force >/dev/null
+  docker exec openviking ov config switch local >/dev/null
+fi
+key="$(grep -E '^OPENVIKING_API_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '"'"'"'')"
+changed=0
+if docker exec openviking ov admin list-accounts --sudo 2>/dev/null | grep -qw "$account"; then
+  echo "account $account already exists"
+  if [ -z "$key" ]; then
+    seed="$(openssl rand -hex 16)"
+    key="$(docker exec openviking ov admin regenerate-key "$account" "$account" --seed "$seed" --sudo -o json 2>/dev/null \
+      | grep -Eo "$KEY_RE" | head -1 || true)"
+    [ -n "$key" ] || die "could not regenerate the user key; set OPENVIKING_API_KEY in $ENV_FILE by hand"
+    changed=1
+  fi
+else
+  key="$(docker exec openviking ov admin create-account "$account" --admin "$account" --sudo -o json 2>/dev/null \
+    | grep -Eo "$KEY_RE" | head -1 || true)"
+  [ -n "$key" ] || die "account created but the API key was not found in the output"
+  changed=1
+  echo "account $account created"
+fi
+
+if [ "$changed" = 1 ]; then
+  set_env_key "$ENV_FILE" OPENVIKING_API_KEY "$key"
+  "$REPO/bin/ov-up" >/dev/null
+  echo "user key saved to $ENV_FILE and mcp-key rewritten"
+fi
+
+# The user config is (re)written from the key we hold and left active for the sync worker.
+printf '%s' "$key" | docker exec -i openviking ov config add custom \
+  --name user --url http://127.0.0.1:1933 --api-key-stdin --activate --force >/dev/null
+echo "cli config 'user' is active"
+
+step "verify the MCP key the way opencode.json sends it"
+code="$(curl -s -o /dev/null -w '%{http_code}' \
+  -H "Authorization: Bearer $(cat "$OV_DIR/mcp-key")" \
+  http://127.0.0.1:1933/api/v1/system/status)"
+[ "$code" = "200" ] || die "mcp-key rejected (HTTP $code)"
+echo "mcp-key accepted (HTTP 200)"
+
+step "claude link"
+if command -v claude >/dev/null; then
+  "$REPO/bin/claude-link"
+else
+  echo "claude not installed, skipping bin/claude-link"
+fi
+
+step "tests"
+(cd "$REPO" && node --test tests/*.test.mjs >/dev/null) || die "node tests failed"
+(cd "$REPO" && python3 -m unittest discover tests) || die "python tests failed"
+
+step "done"
+echo "account $account     ready, mcp openviking points at 127.0.0.1:1933"
+echo "bin/ov-studio       memory browser on http://127.0.0.1:1934/studio"
+echo "memory from the old laptop is NOT here: import it with bin/memory-export if needed"
