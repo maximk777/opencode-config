@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 import json
 import os
+import plistlib
 import string
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-HOME_DIR = Path.home() / ".openviking"
+LAUNCHD = REPO / "openviking" / "launchd"
+AGENTS_DIR = Path.home() / "Library" / "LaunchAgents"
+
+LOGIN_APPS = [("Docker", "/Applications/Docker.app"), ("Ollama", "/Applications/Ollama.app")]
+MANUAL = "System Settings, General, Login Items"
+LOGIN_ITEMS_SCRIPT = 'tell application "System Events" to get the name of every login item'
 
 
 def read_env(path):
@@ -34,16 +41,191 @@ def write_private(path, text):
         f.write(text)
 
 
-def main():
-    env_file = HOME_DIR / ".env"
+def mcp_key(env):
+    # OpenCode reads the MCP header from this file, so the key works outside an interactive shell too.
+    return env["OPENVIKING_API_KEY"].strip("\"'")
+
+
+def render_plist(template_text, home):
+    return string.Template(template_text).substitute(HOME=home)
+
+
+def _error(reason):
+    # A launchctl stderr or an exception message may span lines; a status is one line.
+    return "error: " + str(reason).strip().replace("\n", " ")
+
+
+def install_agent(run, label, rendered, agents_dir, uid, sleep=time.sleep):
+    """Adopt a matching installed plist, otherwise write it and (re)load the agent. Returns a status word or 'error: ...'."""
+    target = agents_dir / f"{label}.plist"
+    domain = f"gui/{uid}"
+    try:
+        print_result = run(["launchctl", "print", f"{domain}/{label}"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return _error(exc)
+    loaded = print_result.returncode == 0
+    existed = target.exists()
+    try:
+        current = target.read_text() if existed else None
+    except OSError as exc:
+        return _error(exc)
+    if current == rendered:
+        if loaded:
+            return "ok"
+        action = ["launchctl", "bootstrap", domain, str(target)]
+        status = "loaded"
+    else:
+        try:
+            agents_dir.mkdir(parents=True, exist_ok=True)
+            target.write_text(rendered)
+        except OSError as exc:
+            return _error(exc)
+        if existed and loaded:
+            # kickstart does not reread the plist, so a changed file needs a full unload/reload.
+            try:
+                bootout_result = run(
+                    ["launchctl", "bootout", f"{domain}/{label}"], capture_output=True, text=True, timeout=30
+                )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                return _error(exc)
+            if bootout_result.returncode != 0:
+                return _error(bootout_result.stderr)
+            # bootout can return before the service is fully unloaded; an immediate bootstrap
+            # then fails with "5: Input/output error", so poll until it clears (or give up).
+            for _ in range(10):
+                try:
+                    poll_result = run(
+                        ["launchctl", "print", f"{domain}/{label}"], capture_output=True, text=True, timeout=30
+                    )
+                except (OSError, subprocess.TimeoutExpired) as exc:
+                    return _error(exc)
+                if poll_result.returncode != 0:
+                    break
+                sleep(0.5)
+        action = ["launchctl", "bootstrap", domain, str(target)]
+        status = "installed" if not existed else "updated"
+    try:
+        result = run(action, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return _error(exc)
+    if result.returncode != 0:
+        return _error(result.stderr)
+    return status
+
+
+def install_agents(run, templates_dir, agents_dir, home, uid, sleep=time.sleep):
+    results = []
+    for template_path in sorted(templates_dir.glob("*.plist")):
+        stem = template_path.stem
+        fallback_name = stem[len("opencode."):] if stem.startswith("opencode.") else stem
+        try:
+            rendered = render_plist(template_path.read_text(), home)
+            label = plistlib.loads(rendered.encode())["Label"]
+            name = label[len("opencode."):] if label.startswith("opencode.") else label
+        except Exception as exc:
+            # Broad on purpose: besides OSError/KeyError/ValueError this also covers
+            # xml.parsers.expat.ExpatError (truncated plist XML), TypeError (plist root
+            # is not a dict) and AttributeError (Label is not a string).
+            results.append((fallback_name, _error(exc)))
+            continue
+        status = install_agent(run, label, rendered, agents_dir, uid, sleep=sleep)
+        results.append((name, status))
+    return results
+
+
+def _read_login_items(run):
+    """Runs the listing script once; returns (items, None) or (None, detail)."""
+    try:
+        result = run(["osascript", "-e", LOGIN_ITEMS_SCRIPT], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, str(exc).strip()
+    if result.returncode != 0:
+        return None, result.stderr.strip()
+    text = result.stdout.strip()
+    return ([item.strip() for item in text.split(",")] if text else []), None
+
+
+def login_items(run):
+    """Names of every current login item, or None when they cannot be read."""
+    items, _ = _read_login_items(run)
+    return items
+
+
+def _add_login_item(run, name, path):
+    script = (
+        'tell application "System Events" to make login item at end '
+        f'with properties {{path:"{path}", hidden:true}}'
+    )
+    try:
+        result = run(["osascript", "-e", script], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return str(exc).strip()
+    if result.returncode != 0:
+        return result.stderr.strip()
+    return None
+
+
+def ensure_login_items(run):
+    """Add missing Docker and Ollama login items; return (status line, ok)."""
+    # Uses the shared reader directly (not login_items()) because the manual-fix line needs the
+    # failure detail that login_items() discards.
+    items, detail = _read_login_items(run)
+    if items is None:
+        return (f"login items: cannot read ({detail}); add Docker and Ollama manually in {MANUAL}", False)
+    missing = [name for name, _ in LOGIN_APPS if name not in items]
+    if not missing:
+        return ("login items: ok", True)
+    added = []
+    failed = []
+    for name, path in LOGIN_APPS:
+        if name not in missing:
+            continue
+        failure = _add_login_item(run, name, path)
+        if failure is None:
+            added.append(name)
+        else:
+            failed.append((name, failure))
+    if not failed:
+        return (f"login items: added {', '.join(added)}", True)
+    manual = f"add {' and '.join(name for name, _ in failed)} manually in {MANUAL} ({failed[0][1]})"
+    if added:
+        return (f"login items: added {', '.join(added)}; {manual}", False)
+    return (f"login items: {manual}", False)
+
+
+def main(run=subprocess.run, home=None, sleep=time.sleep):
+    home = Path(home) if home else Path.home()
+    home_dir = home / ".openviking"
+    env_file = home_dir / ".env"
     if not env_file.exists():
         sys.exit("ov-up: ~/.openviking/.env is missing")
-    conf = HOME_DIR / "ov.conf"
-    write_private(conf, render_config((REPO / "openviking" / "ov.conf.template").read_text(), read_env(env_file)))
-    subprocess.run(["ollama", "pull", "bge-m3"], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(["docker", "compose", "-f", str(REPO / "openviking" / "docker-compose.yml"), "up", "-d"], check=True)
-    print("ov-up: started")
+    conf = home_dir / "ov.conf"
+    env = read_env(env_file)
+    write_private(conf, render_config((REPO / "openviking" / "ov.conf.template").read_text(), env))
+    write_private(home_dir / "mcp-key", mcp_key(env))
+    pull_result = run(["ollama", "pull", "bge-m3"], stdout=subprocess.DEVNULL)
+    if pull_result.returncode != 0:
+        print(f"ov-up: ollama pull failed with exit {pull_result.returncode}", file=sys.stderr)
+        sys.exit(pull_result.returncode)
+    compose_result = run(
+        ["docker", "compose", "-f", str(REPO / "openviking" / "docker-compose.yml"), "up", "-d"]
+    )
+    if compose_result.returncode != 0:
+        print(f"ov-up: docker compose failed with exit {compose_result.returncode}", file=sys.stderr)
+        sys.exit(compose_result.returncode)
+    print("OpenViking: started")
+    all_ok = True
+    statuses = install_agents(run, LAUNCHD, AGENTS_DIR, str(home), os.getuid(), sleep=sleep)
+    for name, status in statuses:
+        print(f"{name}: {status}")
+        if status.startswith("error:"):
+            all_ok = False
+    login_line, login_ok = ensure_login_items(run)
+    print(login_line)
+    if not login_ok:
+        all_ok = False
+    return 0 if all_ok else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

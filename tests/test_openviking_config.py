@@ -22,7 +22,9 @@ class OpenVikingConfig(unittest.TestCase):
         self.assertEqual(conf["vlm"]["api_base"], "https://api.deepseek.com")
 
     def test_no_zai_subscription_key(self):
-        for f in Path("openviking").iterdir():
+        for f in Path("openviking").rglob("*"):
+            if not f.is_file():
+                continue
             text = f.read_text()
             self.assertNotIn("ZHIPU", text)
             self.assertNotIn("zai", text.lower())
@@ -34,6 +36,15 @@ class OpenVikingConfig(unittest.TestCase):
             self.assertEqual(OV.read_env(tmp), {"A": "1", "B": "two"})
         finally:
             tmp.unlink()
+
+
+    def test_mcp_key_is_unquoted_and_private(self):
+        import os, stat, tempfile
+        self.assertEqual(OV.mcp_key({"OPENVIKING_API_KEY": '"abc"'}), "abc")
+        path = Path(tempfile.mkdtemp()) / "mcp-key"
+        OV.write_private(path, OV.mcp_key({"OPENVIKING_API_KEY": "abc"}))
+        self.assertEqual(path.read_text(), "abc")
+        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
 
 
 if __name__ == "__main__":
