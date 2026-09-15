@@ -14,7 +14,18 @@ checkSkill("change-execute", [
   "On resume run ~/.config/opencode/bin/change-state ~/specs/<project> <slug> and continue from its output.",
   "When execution shows the spec is wrong, stop the wave and switch to the change-spec skill.",
   "After the last wave run the full verification, request a final review of the whole change, then run openspec archive <slug> --yes from ~/specs/<project>.",
+  "When a wave is accepted, run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once.",
 ]);
+
+test("change-execute syncs after the archive commit", () => {
+  const text = readSkill("change-execute");
+  const finish = text.slice(text.indexOf("## Finish"));
+  const archive = finish.indexOf("'docs(<slug>): archive change'");
+  const sync = finish.indexOf("Run ~/.config/opencode/bin/ov-sync <project>.");
+  assert.ok(archive >= 0);
+  assert.ok(sync > archive);
+  assert.match(finish, /\n\d+\. Run ~\/\.config\/opencode\/bin\/ov-sync <project>\.\n/);
+});
 
 test("change-execute states the wave dispatch rule", () => {
   const text = readSkill("change-execute");

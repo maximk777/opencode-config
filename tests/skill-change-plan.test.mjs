@@ -10,6 +10,8 @@ checkSkill("change-plan", [
   "Run ~/.config/opencode/bin/waves <change-dir> and save its output to waves.md.",
   "Tasks in one wave never share a file or a Go package.",
   "Stop and ask the user to approve the plan before execution.",
+  "After approval, commit the specs repository with",
+  "run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once",
 ]);
 
 const tpl = (n) => readFileSync(new URL(`../skills/change-plan/templates/${n}`, import.meta.url), "utf8");

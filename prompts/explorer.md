@@ -11,6 +11,7 @@ Rules:
 - If the question is ambiguous, answer the most likely reading and state the assumption in one line.
 
 Output format:
+0. Memory: the line `Memory: query="<query>" hits=<N> used=yes|no rederived=none` for one find or search you ran on the question first; when openviking tools are unavailable, write hits=0 used=no rederived=none and the reason on the next line as `Memory error: <text>`.
 1. Answer: two to five sentences.
 2. Evidence: a list of `path:line` with one line each on what it shows.
 3. Gaps: anything you could not verify, or "none".

@@ -37,7 +37,7 @@ On errors, read the "Next steps" lines, fix the delta, and run it again. To insp
 ## Gate
 
 Stop and ask the user to approve the spec before planning.
-After approval, commit the specs repository with `~/.config/opencode/bin/specs-commit <project> 'docs(<slug>): add spec deltas'`, run ~/.config/opencode/bin/ov-sync <project>, and load the change-plan skill.
+After approval, commit the specs repository with `~/.config/opencode/bin/specs-commit <project> 'docs(<slug>): add spec deltas'`, run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once, and load the change-plan skill.
 
 ## Spec errors during execution
 

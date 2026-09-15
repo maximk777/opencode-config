@@ -14,6 +14,7 @@ checkSkill("architecture-poc", [
   "Write poc/<slug>/RESULT.md from templates/poc-result.md with raw numbers and a verdict.",
   "Link RESULT.md from the ADR that relies on it.",
   "Never copy PoC code into a product repository; write a candidate card instead.",
+  "After the user accepts the result, commit the specs repository and run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once.",
 ]);
 
 const tpl = (n) => readFileSync(`${ROOT}skills/architecture-docs/templates/${n}`, "utf8");

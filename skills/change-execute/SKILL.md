@@ -35,11 +35,13 @@ After three rejected fix rounds with the same executor, dispatch executor-strong
 
 Call phase_reset after the spec is approved, after the plan is approved, and after every wave is accepted.
 The compaction keeps the change state from files; after it, run change-state if anything is unclear and continue.
+Where phase_reset is not available, as in Claude Code, do not wait for a reset: continue, and after an automatic compaction the SessionStart hook restores the change state.
 
 ## Acceptance
 
 Accept a task only when the last Verdict line in its report is Verdict: COMPLIANT; if the report has no verdict, dispatch task-reviewer again.
 On acceptance run git add -- <task files> and check the task in tasks.md.
+When a wave is accepted, run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once.
 Never commit in the work repository; at the end propose commits using the commit-message skill.
 If an executor touched a file outside its list, the reviewer flags it; revert that file only with the user's consent.
 

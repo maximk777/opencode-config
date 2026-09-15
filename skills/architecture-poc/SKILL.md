@@ -21,7 +21,7 @@ Examples: a table layout for a new database against a latency target; a streamin
 6. Repeat each measurement at least three times; keep raw numbers, not only averages.
 7. Write poc/<slug>/RESULT.md from templates/poc-result.md with raw numbers and a verdict.
 8. Link RESULT.md from the ADR that relies on it.
-9. Commit the specs repository and run ~/.config/opencode/bin/ov-sync <project>.
+9. After the user accepts the result, commit the specs repository and run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once.
 
 ## After the verdict
 

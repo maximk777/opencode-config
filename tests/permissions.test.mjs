@@ -121,6 +121,12 @@ test("flow scripts are allowed by path prefix only", () => {
   for (const a of ["architect", "harness-builder"]) {
     expectAll(a, "bash", "allow", ["~/.config/opencode/bin/specs-commit p 'docs(x): add adr'"]);
   }
+  expectAll("setup-improver", "bash", "allow", ["~/.config/opencode/bin/ov-usage --days 7"]);
+});
+
+test("explorer may find and search in memory", () => {
+  expectAll("explorer", "openviking_find", "allow", ["*"]);
+  expectAll("explorer", "openviking_search", "allow", ["*"]);
 });
 
 test("edits stay in the specs tree outside the work repository", () => {
@@ -133,6 +139,18 @@ test("edits stay in the specs tree outside the work repository", () => {
   expectAll("harness-builder", "edit", "deny", ["x.harness-probe-1", "specs/p/harness/x.md"]);
   expectAll("setup-improver", "edit", "allow", ["prompts/orchestrator.md"]);
   expectAll("setup-improver", "edit", "deny", ["../programming/w/main.go"]);
+});
+
+test("architect runs proofs of concept in Go, Python, Node, Rust and Zig", () => {
+  expectAll("architect", "bash", "allow", ["go run ./poc", "python3 bench.py", "node bench.mjs", "cargo run --release", "cargo bench", "rustc main.rs", "zig build run", "zig run main.zig"]);
+  expectAll("architect", "bash", "ask", ["cargo run > out.txt"]);
+});
+
+test("default model and memory server do not depend on the shell environment", () => {
+  assert.equal(cfg.model, "{file:./tiers/fast}");
+  assert.equal(cfg.small_model, "{file:./tiers/fast}");
+  assert.equal(cfg.mcp.openviking.oauth, false);
+  assert.match(cfg.mcp.openviking.headers.Authorization, /^Bearer \{file:~\/\.openviking\/[a-z-]+\}$/);
 });
 
 test("reviewer and explorer run no writing commands", () => {

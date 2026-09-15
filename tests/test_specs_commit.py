@@ -1,10 +1,13 @@
 import importlib.machinery
+import os
 import shutil
 import subprocess
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
+REPO = Path(__file__).resolve().parents[1]
 S = importlib.machinery.SourceFileLoader("specs_commit", "bin/specs-commit").load_module()
 
 
@@ -61,6 +64,50 @@ class SpecsCommit(unittest.TestCase):
             self.assertTrue(ok, text)
         finally:
             shutil.rmtree(link_root, ignore_errors=True)
+
+
+class NoOpenViking(unittest.TestCase):
+    def test_commits_without_docker_on_path(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, True)
+        # PATH exposes only git, via a symlink, so any docker/ov-sync call would raise FileNotFoundError.
+        path_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, path_dir, True)
+        (path_dir / "git").symlink_to(shutil.which("git"))
+        repo = root / "demo"
+        repo.mkdir()
+        git(repo, "init", "-q")
+        git(repo, "config", "user.name", "test")
+        git(repo, "config", "user.email", "test@example.com")
+        # Local override: the global gpgsign=ssh config needs ssh-keygen, which the
+        # restricted PATH below deliberately omits.
+        git(repo, "config", "commit.gpgsign", "false")
+        (repo / "note.md").write_text("note\n")
+
+        recorded = []
+        real_run = subprocess.run
+
+        def recording_run(argv, **kwargs):
+            recorded.append(argv)
+            return real_run(argv, **kwargs)
+
+        with unittest.mock.patch.dict(os.environ, {"PATH": str(path_dir)}):
+            with unittest.mock.patch("subprocess.run", recording_run):
+                ok, text = S.commit("demo", "docs(demo): add note", root=root)
+
+        self.assertTrue(ok, text)
+        self.assertTrue(recorded)
+        self.assertTrue(any(argv[:2] == ["git", "commit"] for argv in recorded))
+        self.assertEqual(git(repo, "log", "-1", "--format=%s"), "docs(demo): add note")
+        for argv in recorded:
+            name = Path(argv[0]).name
+            self.assertNotEqual(name, "docker")
+            self.assertFalse(name.endswith("ov-sync"))
+
+    def test_source_has_no_openviking_call(self):
+        text = (REPO / "bin/specs-commit").read_text()
+        for word in ("docker", "ov-sync", "openviking", "add-resource"):
+            self.assertNotIn(word, text)
 
 
 if __name__ == "__main__":

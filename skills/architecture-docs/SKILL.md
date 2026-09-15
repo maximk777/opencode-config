@@ -41,4 +41,14 @@ Copy diagrams into the work repository docs/ only when the user explicitly asks 
 
 - Read code through the explorer subagent; do not guess how things are built.
 - Discuss one question at a time; propose alternatives with a recommendation.
-- After an accepted document, commit the specs repository with `~/.config/opencode/bin/specs-commit <project> '<message>'` and run ~/.config/opencode/bin/ov-sync <project>.
+- After an accepted document, commit the specs repository with `~/.config/opencode/bin/specs-commit <project> '<message>'` and run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once.
+
+## Session log
+
+- Start the session with `find` or `search` on its question.
+- Keep the log in `~/specs/<project>/architecture/sessions/<YYYY-MM-DD>-<topic>.md`.
+- Its first entry is `Memory: query="<query>" hits=<N> used=yes|no rederived=<ADR or map path|none>`.
+- During the session, append every user answer and decision as soon as it is given and commit it with `~/.config/opencode/bin/specs-commit <project> 'docs(architecture): record <topic> decisions'`.
+- Copy the Memory line from each explorer report into the log.
+- In the Memory line write rederived=none and never edit the Memory line; when a decision reached in the session already sits in an ADR or a map, append `Rederived: <ADR or map path>` to the log and commit it.
+- When openviking tools fail, write `hits=0 used=no` in the Memory line and the error on the next line as `Memory error: <text>`, and continue from files.

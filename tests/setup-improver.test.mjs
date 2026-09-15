@@ -10,6 +10,8 @@ checkSkill("opencode-config-improver", [
   "Compare the config with the changelog of the installed OpenCode version (opencode --version) and report deprecated keys and new options.",
   "For every row in sources.lock, show the upstream diff since the pinned commit and recommend what to take; never pull automatically.",
   "Measure the flow from session logs: subagents over their steps limit, repeated reviewer rejection reasons, repeated tool failures.",
+  "Run ~/.config/opencode/bin/ov-usage --days 7",
+  "used findings",
   "Mark edits to prompts/orchestrator.md or prompts/task-reviewer.md as risky and run bin/smoke-run after applying them.",
   "Verify model changes with ~/.config/opencode/bin/oc-agent <name>; never run opencode debug config.",
   "Project-specific rules and skills belong to the instrumentation agent in that project.",

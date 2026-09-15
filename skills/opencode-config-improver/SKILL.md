@@ -15,7 +15,7 @@ Project-specific rules and skills belong to the instrumentation agent in that pr
 
 1. OpenCode drift. Compare the config with the changelog of the installed OpenCode version (opencode --version) and report deprecated keys and new options.
 2. Upstream sources. For every row in sources.lock, show the upstream diff since the pinned commit and recommend what to take; never pull automatically.
-3. Flow metrics. Measure the flow from session logs: subagents over their steps limit, repeated reviewer rejection reasons, repeated tool failures.
+3. Flow metrics. Measure the flow from session logs: subagents over their steps limit, repeated reviewer rejection reasons, repeated tool failures. Run ~/.config/opencode/bin/ov-usage --days 7 and report the week's VLM calls, agent reads, memory lines and used findings against ADR-005's thresholds: fewer than one used finding per ten sessions means fallback B, no reads means option C.
 4. Lint. Run ~/.config/opencode/bin/agents-lint on the repositories the user names, and the config's own tests with `node --test tests/` and `python3 -m unittest discover tests`.
 
 ## Changing the setup

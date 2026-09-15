@@ -39,4 +39,4 @@ Understand a service, measure where it breaks, and propose mostly programmatic g
 
 ## Output location
 
-~/specs/<project>/harness/profile.md, error-background.md, gates.md. Commit the specs repository and run ~/.config/opencode/bin/ov-sync <project>.
+~/specs/<project>/harness/profile.md, error-background.md, gates.md. After the user accepts the assessment, commit the specs repository and run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once.

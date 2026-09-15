@@ -12,8 +12,18 @@ checkSkill("change-brainstorm", [
   "If ~/specs/<project> does not exist, create it, run git init and openspec init --tools none.",
   "After each approved design section, commit the specs repository",
   "Pass proposal.md and design.md through the humanize skill.",
-  "Search OpenViking memory before asking the user.",
   "Set the session title to include [change:<project>/<slug>].",
+  "run find or search on the change's question",
+  'Memory: query="<query>" hits=<N> used=yes|no rederived=<ADR or map path|none>',
+  "write the Memory line with hits=0 used=no rederived=none",
+  "Memory error: <text>",
+  "commit decisions.md before the first question",
+  "## Decision log",
+  "every user answer and decision to ~/specs/<project>/openspec/changes/<slug>/decisions.md as soon as it is given",
+  "commit it at once",
+  "the Memory line from each explorer report into the log",
+  "never edit the Memory line",
+  "Rederived: <ADR or map path>",
 ]);
 
 test("sources.lock pins superpowers brainstorming", () => {
