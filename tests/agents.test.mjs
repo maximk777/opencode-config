@@ -23,10 +23,14 @@ test("executors and reviewer are hidden subagents with the right tiers", () => {
   assert.equal(A["task-reviewer"].model, "{file:./tiers/smart}");
 });
 
-test("nobody in the change flow can commit", () => {
-  for (const n of ["orchestrator", "executor", "executor-strong"]) {
+test("executors cannot commit and the orchestrator commits only on approval", () => {
+  assert.equal(A.orchestrator.permission.bash["git commit*"], "ask");
+  for (const n of ["executor", "executor-strong"]) {
     assert.equal(A[n].permission.bash["git commit*"], "deny", n);
   }
+  const orchestratorPrompt = prompt("orchestrator");
+  assert.ok(orchestratorPrompt.includes("Never commit in the work repository unless the user asks; git commit and git push ask for approval."));
+  assert.ok(!orchestratorPrompt.includes("Never commit in the work repository. Commit only"));
 });
 
 test("orchestrator edits only specs and dispatches only the flow subagents", () => {
@@ -74,6 +78,26 @@ test("orchestrator syncs only at gates and copies explorer Memory lines", () => 
   assert.ok(resume.includes("read the decisions.md it names"));
   assert.ok(resume.includes("one find scoped to the change"));
   assert.ok(resume.includes("when synced_commit differs from HEAD, trust the files"));
+});
+
+test("resume restores the todo list right after change-state", () => {
+  const p = prompt("orchestrator");
+  const resume = p.slice(p.indexOf("## Resume"));
+  assert.ok(resume.includes(
+    "Right after change-state, run ~/.config/opencode/bin/change-todos ~/specs/<project> <slug> and pass its output unchanged to todowrite when that tool is available; skip the step otherwise."
+  ));
+  assert.ok(resume.includes(
+    "When change-todos exits non-zero or todowrite returns an error, skip the step without reporting it and continue."
+  ));
+  const cmd = readFileSync(`${ROOT}commands/resume.md`, "utf8");
+  const line =
+    "Right after change-state, run ~/.config/opencode/bin/change-todos ~/specs/<project> $ARGUMENTS and pass its output unchanged to todowrite when that tool is available; skip the step otherwise.";
+  assert.ok(cmd.includes(line));
+  assert.ok(cmd.includes(
+    "When change-todos exits non-zero or todowrite returns an error, skip the step without reporting it and continue."
+  ));
+  assert.ok(cmd.indexOf("change-todos") > cmd.indexOf("bin/change-state"));
+  assert.ok(cmd.indexOf("change-todos") < cmd.indexOf("read the decisions.md it names"));
 });
 
 test("explorer output format starts with the Memory line", () => {

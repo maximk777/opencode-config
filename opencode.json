@@ -183,6 +183,8 @@
           "~/.config/opencode/bin/waves *": "allow",
           "?/.config/opencode/bin/change-state *": "allow",
           "~/.config/opencode/bin/change-state *": "allow",
+          "?/.config/opencode/bin/change-todos *": "allow",
+          "~/.config/opencode/bin/change-todos *": "allow",
           "?/.config/opencode/bin/check-commit-msg*": "allow",
           "~/.config/opencode/bin/check-commit-msg*": "allow",
           "?/.config/opencode/bin/ov-sync *": "allow",
@@ -318,6 +320,10 @@
           "?/.config/opencode/bin/change-state * 2>&1": "allow",
           "~/.config/opencode/bin/change-state * 2>/dev/null": "allow",
           "~/.config/opencode/bin/change-state * 2>&1": "allow",
+          "?/.config/opencode/bin/change-todos * 2>/dev/null": "allow",
+          "?/.config/opencode/bin/change-todos * 2>&1": "allow",
+          "~/.config/opencode/bin/change-todos * 2>/dev/null": "allow",
+          "~/.config/opencode/bin/change-todos * 2>&1": "allow",
           "*>*>*": "ask",
           "* --output*": "ask",
           "find *-exec*": "ask",
@@ -340,13 +346,14 @@
           "export -p": "deny",
           "*.env": "deny",
           "*.env *": "deny",
-          "git commit*": "deny",
-          "git * commit*": "deny",
-          "git push*": "deny",
-          "git * push*": "deny",
+          "git commit*": "ask",
+          "git * commit*": "ask",
+          "git push*": "ask",
+          "git * push*": "ask",
           "opencode debug*": "deny"
         },
-        "phase_reset": "allow"
+        "phase_reset": "allow",
+        "todowrite": "allow"
       }
     },
     "executor": {
@@ -373,7 +380,8 @@
         },
         "openviking_*": "deny",
         "openviking_find": "allow",
-        "openviking_read": "allow"
+        "openviking_read": "allow",
+        "todowrite": "deny"
       }
     },
     "executor-strong": {
@@ -400,7 +408,8 @@
         },
         "openviking_*": "deny",
         "openviking_find": "allow",
-        "openviking_read": "allow"
+        "openviking_read": "allow",
+        "todowrite": "deny"
       }
     },
     "task-reviewer": {
@@ -432,7 +441,8 @@
           "export -p": "deny",
           "*.env": "deny",
           "*.env *": "deny"
-        }
+        },
+        "todowrite": "deny"
       }
     },
     "architect": {

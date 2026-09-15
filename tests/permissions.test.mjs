@@ -101,9 +101,10 @@ test("secrets stay out of bash output", () => {
 });
 
 test("only setup-improver commits, and never through git -C", () => {
-  for (const a of ["orchestrator", "architect", "harness-builder", "instrumentation", "workspace-builder", "executor", "executor-strong"]) {
+  for (const a of ["architect", "harness-builder", "instrumentation", "workspace-builder", "executor", "executor-strong"]) {
     expectAll(a, "bash", "deny", ["git commit -m x", "git -C /w commit -m x", "git -c a=b commit", "git push", "git -C /w push"]);
   }
+  expectAll("orchestrator", "bash", "ask", ["git commit -m x", "git -C /w commit -m x", "git -c a=b commit", "git push", "git -C /w push"]);
   expectAll("setup-improver", "bash", "allow", ["git add prompts/x.md", "git commit -m 'fix(x): y'"]);
   expectAll("setup-improver", "bash", "deny", ["git -C /w commit -m x", "git push"]);
 });
@@ -112,6 +113,9 @@ test("flow scripts are allowed by path prefix only", () => {
   expectAll("orchestrator", "bash", "allow", [
     "~/.config/opencode/bin/waves ~/specs/p/openspec/changes/x",
     `${HOME}/.config/opencode/bin/change-state ~/specs/p x`,
+    `${HOME}/.config/opencode/bin/change-todos ~/specs/p x`,
+    "~/.config/opencode/bin/change-todos ~/specs/p x 2>&1",
+    "~/.config/opencode/bin/change-todos ~/specs/p x 2>/dev/null",
     "~/.config/opencode/bin/check-commit-msg",
     "~/.config/opencode/bin/ov-sync p",
     "~/.config/opencode/bin/specs-commit p 'docs(x): add plan'",
@@ -122,6 +126,13 @@ test("flow scripts are allowed by path prefix only", () => {
     expectAll(a, "bash", "allow", ["~/.config/opencode/bin/specs-commit p 'docs(x): add adr'"]);
   }
   expectAll("setup-improver", "bash", "allow", ["~/.config/opencode/bin/ov-usage --days 7"]);
+});
+
+test("only the orchestrator keeps the todo list", () => {
+  expectAll("orchestrator", "todowrite", "allow", ["*"]);
+  for (const a of ["executor", "executor-strong", "task-reviewer"]) {
+    expectAll(a, "todowrite", "deny", ["*"]);
+  }
 });
 
 test("explorer may find and search in memory", () => {

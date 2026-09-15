@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { checkSkill } from "./lib/skill.mjs";
+import { checkSkill, readSkill } from "./lib/skill.mjs";
 
 checkSkill("change-plan", [
   "Write tasks.md in OpenSpec checkbox format and one brief per task from templates/brief.md.",
@@ -12,6 +12,8 @@ checkSkill("change-plan", [
   "Stop and ask the user to approve the plan before execution.",
   "After approval, commit the specs repository with",
   "run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once",
+  "After the plan commit and ov-sync, run ~/.config/opencode/bin/change-todos ~/specs/<project> <slug> and pass its output unchanged to todowrite when that tool is available; skip the step otherwise.",
+  "When change-todos exits non-zero or todowrite returns an error, skip the step without reporting it and continue.",
 ]);
 
 const tpl = (n) => readFileSync(new URL(`../skills/change-plan/templates/${n}`, import.meta.url), "utf8");
@@ -23,3 +25,16 @@ test("brief template carries wave metadata and constraints", () => {
 });
 
 test("report template has a status line", () => assert.ok(tpl("report.md").includes("Status:")));
+
+test("change-plan loads change-execute after the todo step", () => {
+  const text = readSkill("change-plan");
+  const gate = text.slice(text.indexOf("## Gate"));
+  const todoIdx = gate.indexOf("change-todos");
+  const commitIdx = gate.indexOf("'docs(<slug>): add plan'");
+  const loadIdx = gate.indexOf("load the change-execute skill");
+  assert.ok(commitIdx >= 0);
+  assert.ok(todoIdx >= 0);
+  assert.ok(loadIdx >= 0);
+  assert.ok(todoIdx > commitIdx);
+  assert.ok(todoIdx < loadIdx);
+});

@@ -41,4 +41,7 @@ If the script reports a cycle or missing dependency, fix the briefs' `depends` a
 ## Gate
 
 Stop and ask the user to approve the plan before execution.
-Show the waves and the tier of each task. After approval, commit the specs repository with `~/.config/opencode/bin/specs-commit <project> 'docs(<slug>): add plan'`, run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once, and load the change-execute skill.
+Show the waves and the tier of each task. After approval, commit the specs repository with `~/.config/opencode/bin/specs-commit <project> 'docs(<slug>): add plan'`, run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once.
+After the plan commit and ov-sync, run ~/.config/opencode/bin/change-todos ~/specs/<project> <slug> and pass its output unchanged to todowrite when that tool is available; skip the step otherwise.
+When change-todos exits non-zero or todowrite returns an error, skip the step without reporting it and continue.
+Then load the change-execute skill.
