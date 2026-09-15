@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Scan every commit on every ref for private markers and secret patterns.
+
+Prints `commit <short-sha> <path>` per hit to stderr and exits 1; exits 0 with
+a one-line summary when the history is clean. Optional first argument is the
+repository (default: working directory).
+"""
+import re
+import subprocess
+import sys
+
+# Fragments are concatenated so this file never carries a literal marker.
+MARKERS = [
+    "wb" + "bank",
+    "abs-" + "arm",
+    "wild" + "berries",
+    "rwb" + ".ru",
+    "kir" + "ienkov",
+    "super" + "office",
+    "stage-" + "el",
+    "stage-" + "xs",
+    "stage-" + "nb",
+    "OD" + "ARM",
+]
+MARKER_RE = re.compile("|".join(re.escape(m) for m in MARKERS), re.IGNORECASE)
+
+# Literal apiKey value: any string not starting with "{", so {env:}/{file:}
+# reference values pass.
+APIKEY_RE = re.compile(r'"apiKey"\s*:\s*"[^{]')
+SK_RE = re.compile(r"sk-\w{16,}")
+GHP_RE = re.compile(r"ghp_\w{20,}")
+
+# High-entropy candidate runs; a hit needs lower, upper and digit together.
+ENTROPY_MIN = 40
+ENTROPY_RE = re.compile(r"[A-Za-z0-9+/_-]{%d,}" % ENTROPY_MIN)
+
+
+def git(*args, repo):
+    return subprocess.run(["git", *args], cwd=repo, check=True,
+                          capture_output=True, text=True).stdout
+
+
+def content_rules(text):
+    rules = set()
+    if MARKER_RE.search(text):
+        rules.add("marker")
+    if APIKEY_RE.search(text):
+        rules.add("apiKey")
+    if SK_RE.search(text):
+        rules.add("sk-")
+    if GHP_RE.search(text):
+        rules.add("ghp_")
+    for run in ENTROPY_RE.findall(text):
+        if (any(c.islower() for c in run) and any(c.isupper() for c in run)
+                and any(c.isdigit() for c in run)):
+            rules.add("entropy")
+            break
+    return frozenset(rules)
+
+
+def blob_trips(shas, repo):
+    """Scan each unique blob once over a single cat-file --batch session.
+
+    Returns sha -> frozenset of rule names that fired in the blob.
+    """
+    trips = {}
+    if not shas:
+        return trips
+    proc = subprocess.Popen(["git", "cat-file", "--batch"], cwd=repo,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    try:
+        for sha in sorted(shas):
+            proc.stdin.write(sha.encode() + b"\n")
+            proc.stdin.flush()
+            parts = proc.stdout.readline().decode().split()
+            if len(parts) != 3 or parts[1] == "missing":
+                continue
+            size = int(parts[2])
+            body = proc.stdout.read(size + 1)[:size]
+            rules = content_rules(body.decode("utf-8", "replace"))
+            if rules:
+                trips[sha] = rules
+    finally:
+        proc.stdin.close()
+        proc.kill()
+        proc.wait()
+    return trips
+
+
+def main():
+    repo = sys.argv[1] if len(sys.argv) > 1 else "."
+    commits = git("rev-list", "--all", repo=repo).split()
+    trees = {}
+    blobs = set()
+    for commit in commits:
+        entries = []
+        for record in git("ls-tree", "-r", "-z", commit, repo=repo).split("\0"):
+            if not record:
+                continue
+            meta, path = record.split("\t", 1)
+            _, kind, sha = meta.split()
+            if kind == "blob":
+                entries.append((sha, path))
+                blobs.add(sha)
+        trees[commit] = entries
+    trips = blob_trips(blobs, repo)
+    hits = []
+    for commit in commits:
+        for sha, path in trees[commit]:
+            rules = trips.get(sha)
+            # npm integrity hashes in package-lock.json are public by design, so entropy alone never flags that file.
+            if rules == {"entropy"} and path.rsplit("/", 1)[-1] == "package-lock.json":
+                continue
+            if MARKER_RE.search(path) or rules:
+                hits.append(f"commit {commit[:12]} {path}")
+    if hits:
+        print("\n".join(hits), file=sys.stderr)
+        print(f"check-public: {len(hits)} hit(s) across {len(commits)} commits",
+              file=sys.stderr)
+        return 1
+    print(f"check-public: clean: {len(commits)} commits, {len(blobs)} blobs scanned")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
