@@ -6,7 +6,6 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 OV_DIR="$HOME/.openviking"
 ENV_FILE="$OV_DIR/.env"
-KEY_RE='[A-Za-z0-9+/=]{2,}\.[A-Za-z0-9+/=]{2,}\.[0-9a-f]{40,}'
 
 step() { printf '\n== %s\n' "$1"; }
 die() { printf 'bootstrap: %s\n' "$1" >&2; exit 1; }
@@ -42,6 +41,9 @@ wait_http() { # url timeout_seconds: wait until the port answers with any http c
 
 have curl || die "curl not found (macOS ships it)"
 have git || die "git not found, install git"
+
+# Casks like Docker Desktop are not notarized; without this Gatekeeper blocks the app.
+export HOMEBREW_CASK_OPTS="--no-quarantine"
 
 if ! have brew; then
   [ "$(uname -s)" = "Darwin" ] || die "brew missing and this setup is macOS-specific"
@@ -188,6 +190,15 @@ PY
 fi
 
 step "ov-up: render config, ollama pull, docker compose, launchd agents"
+# launchd plists land in ~/Library/LaunchAgents; a previous sudo run leaves them
+# root-owned and ov-up cannot replace them.
+LA="$HOME/Library/LaunchAgents"
+for target in "$LA" "$LA"/opencode.*.plist; do
+  [ -e "$target" ] || break
+  if [ ! -w "$target" ]; then
+    die "$target is not writable by $(id -un); fix with: sudo chown -R \"\$(id -un):staff\" \"$LA\""
+  fi
+done
 "$REPO/bin/ov-up"
 
 step "waiting for OpenViking on 127.0.0.1:1933"
@@ -201,7 +212,8 @@ done
 echo "server is up (HTTP $code)"
 
 # --sudo resolves the root key from the active CLI config, so a root-keyed "local"
-# config is installed first and the user key is captured from the command output.
+# config is installed first; the user key is read back from the server, never parsed
+# from the create output.
 step "admin account"
 docker exec openviking ov language en >/dev/null
 root_key="$(grep -E '^OPENVIKING_ROOT_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '"'"'"'')"
@@ -217,26 +229,28 @@ if ! printf '%s' "$root_key" | docker exec -i openviking ov config add custom \
     --account "$account" --user "$account" --force >/dev/null
   docker exec openviking ov config switch local >/dev/null
 fi
-key="$(grep -E '^OPENVIKING_API_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '"'"'"'')"
-changed=0
 if docker exec openviking ov admin list-accounts --sudo 2>/dev/null | grep -qw "$account"; then
   echo "account $account already exists"
-  if [ -z "$key" ]; then
-    seed="$(openssl rand -hex 16)"
-    key="$(docker exec openviking ov admin regenerate-key "$account" "$account" --seed "$seed" --sudo -o json 2>/dev/null \
-      | grep -Eo "$KEY_RE" | head -1 || true)"
-    [ -n "$key" ] || die "could not regenerate the user key; set OPENVIKING_API_KEY in $ENV_FILE by hand"
-    changed=1
-  fi
 else
-  key="$(docker exec openviking ov admin create-account "$account" --admin "$account" --sudo -o json 2>/dev/null \
-    | grep -Eo "$KEY_RE" | head -1 || true)"
-  [ -n "$key" ] || die "account created but the API key was not found in the output"
-  changed=1
+  docker exec openviking ov admin create-account "$account" --admin "$account" --sudo >/dev/null
   echo "account $account created"
 fi
+# The account admin can always read its user keys back, so the key is fetched from
+# the server: this self-heals a lost OPENVIKING_API_KEY on reruns.
+key="$(docker exec openviking ov admin list-users "$account" -o json 2>/dev/null | python3 -c '
+import json
+import sys
 
-if [ "$changed" = 1 ]; then
+data = json.load(sys.stdin)
+for user in data.get("result", []):
+    if user.get("api_key"):
+        print(user["api_key"])
+        break
+')"
+[ -n "$key" ] || die "could not read the user key for account $account from the server"
+
+old_key="$(grep -E '^OPENVIKING_API_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '"'"'"'')"
+if [ "$key" != "$old_key" ]; then
   set_env_key "$ENV_FILE" OPENVIKING_API_KEY "$key"
   "$REPO/bin/ov-up" >/dev/null
   echo "user key saved to $ENV_FILE and mcp-key rewritten"
