@@ -109,7 +109,8 @@ def main():
         for sha, path in trees[commit]:
             rules = trips.get(sha)
             # npm integrity hashes in package-lock.json are public by design, so entropy alone never flags that file.
-            if rules == {"entropy"} and path.rsplit("/", 1)[-1] == "package-lock.json":
+            # tests/test_check_public.py carries the guard's own synthetic fixture secrets, so entropy alone never flags it either.
+            if rules == {"entropy"} and path.rsplit("/", 1)[-1] in {"package-lock.json", "test_check_public.py"}:
                 continue
             if MARKER_RE.search(path) or rules:
                 hits.append(f"commit {commit[:12]} {path}")

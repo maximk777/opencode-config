@@ -59,6 +59,12 @@ class CheckPublic(unittest.TestCase):
             result = run_guard(repo)
         self.assertNotEqual(result.returncode, 0)
 
+    def test_guard_test_file_entropy_is_not_a_secret(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo({"tests/test_check_public.py": INTEGRITY + "\n"})
+            result = run_guard(repo)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
