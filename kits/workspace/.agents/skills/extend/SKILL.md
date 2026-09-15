@@ -5,13 +5,17 @@ description: Use to add an agent, skill, rule, role, domain, stream, map element
 # Extend the workspace
 
 ## Steps
-1. Go to the workspace root: the nearest directory, walking up from where you are, where `test -f .agents/kit.json` succeeds. Run every command below from there.
+1. Go to the workspace root: the nearest directory, walking up from where you are, where `test -f .agents/kit.json` succeeds. Run every command below from there. Then find the workspace language:
+   - Run `grep -o '"language": *"[a-z]*"' .agents/kit.json`. When it prints a line such as `"language": "ru"`, the language is the code in the last quotes, here `ru`. When it prints nothing, the language is `en`. Call it `<language>`.
+   - A profile template `<name>` of profile `<profile>` is `.agents/profiles/<profile>/<name>.<language>.md` when `<language>` is not `en` and `test -f .agents/profiles/<profile>/<name>.<language>.md` succeeds; otherwise it is `.agents/profiles/<profile>/<name>.md`. Example with language `ru`: the `epic` template of `ui-migration` is `.agents/profiles/ui-migration/epic.ru.md`.
+   - In `profile.json` a heading, a column list, a key list, and the `title`, `note` and `columns` of `breakdown` may be a language object such as `{"en": "Transitions", "ru": "Переходы"}`. Take its value under `<language>`, or under `en` when that key is absent. A plain value is used as it is.
 2. Ask the person for the kind and the name, and wait for both answers:
    - kind: one of `agent`, `skill`, `rule`, `role`, `domain`, `stream`, `map-element`, `stand`, `variable`, `repository`;
    - name: lowercase letters, digits and `-` only (`[a-z0-9-]+`), for example `release-notes`; for `variable` use `[A-Z][A-Z0-9_]*`, for example `TRACKER_TOKEN`. For `stream` the name is the stream name, for `map-element` it is the element slug.
    - For `repository`, stop here and follow `.agents/skills/repos-add/SKILL.md` instead.
+   - For `domain`, also ask which profile the domain's map follows. Show the profiles with `ls .agents/profiles` and let the person pick one of them.
    - For `stream`, also ask the domain and the profile. Show the profiles with `ls .agents/profiles` and let the person pick one of them.
-   - For `map-element`, also ask the domain and whether to add the element to the scope of a stream, and if so which stream. The profile is then the `"profile"` value of `domains/<domain>/streams/<stream>/stream.json`; without a stream, show `ls .agents/profiles` and let the person pick one. Then read the `elements` list in `.agents/profiles/<profile>/profile.json`; when it has more than one object, ask the person which `kind` to add. From the chosen object take `kind`, `prefix`, `dir` and `fields`. The template is `.agents/profiles/<profile>/<kind>.md` and the element key is `<prefix>:<domain>/<name>`. Run `test -f .agents/profiles/<profile>/<kind>.md`; when it fails, stop, tell the person the profile has no template for that kind, and change nothing. Example: with the `ui-migration` profile the kind is `screen`, the prefix is `screen`, the directory is `map`, the template is `.agents/profiles/ui-migration/screen.md` and the key is `screen:<domain>/<name>`.
+   - For `map-element`, also ask the domain and whether to add the element to the scope of a stream, and if so which stream. The profile is then the `"profile"` value of `domains/<domain>/streams/<stream>/stream.json`; without a stream, show `ls .agents/profiles` and let the person pick one. Then read the `elements` list in `.agents/profiles/<profile>/profile.json`; when it has more than one object, ask the person which `kind` to add. From the chosen object take `kind`, `prefix`, `dir`, `fields` and `tables`. The template is the profile template `<kind>` from step 1 and the element key is `<prefix>:<domain>/<name>`. Run `test -f .agents/profiles/<profile>/<kind>.md`; when it fails, stop, tell the person the profile has no template for that kind, and change nothing. Example: with the `ui-migration` profile the kind is `screen`, the prefix is `screen`, the directory is `map`, the template is `.agents/profiles/ui-migration/screen.md` (`.agents/profiles/ui-migration/screen.ru.md` with language `ru`) and the key is `screen:<domain>/<name>`.
    - For `stream` and `map-element`, run `test -d domains/<domain>`. When it fails, the domain does not exist: stop, tell the person to add the domain first, and change nothing. For `map-element` with a stream, also run `test -f domains/<domain>/streams/<stream>/stream.json`; when it fails, stop the same way.
 3. Check that the name is free. Run the command of the kind:
    - agent: `test -e .agents/agents/<name>.md`
@@ -64,12 +68,12 @@ description: Use to add an agent, skill, rule, role, domain, stream, map element
   2. Replace every `<role>` with `<name>` and fill the sections.
   3. No generated files.
 - domain:
-  1. Run `mkdir -p domains/<name>/map && cp .agents/templates/domain/README.md domains/<name>/README.md && cp .agents/templates/MAP.md domains/<name>/MAP.md && touch domains/<name>/map/.gitkeep`.
+  1. Run `mkdir -p domains/<name>/map && cp .agents/templates/domain/README.md domains/<name>/README.md && cp <map template> domains/<name>/MAP.md && touch domains/<name>/map/.gitkeep`, where `<map template>` is the profile template `MAP` from step 1: `.agents/profiles/<profile>/MAP.md`, or `.agents/profiles/<profile>/MAP.<language>.md` when that file exists. For `ui-migration` with language `en`: `cp .agents/profiles/ui-migration/MAP.md domains/<name>/MAP.md`; with language `ru`: `cp .agents/profiles/ui-migration/MAP.ru.md domains/<name>/MAP.md`.
   2. In `domains/<name>/README.md` replace every `<name>` with the domain name and fill `## Purpose`.
   3. In `domains/<name>/MAP.md` replace every `<domain>` with the domain name. Change nothing else.
   4. Generated files: the tables between the `map:` markers in `domains/<name>/MAP.md`.
 - stream:
-  1. Run `mkdir -p domains/<domain>/streams/<name> && cp .agents/templates/stream.json domains/<domain>/streams/<name>/stream.json && cp .agents/templates/epic.md domains/<domain>/streams/<name>/epic.md`.
+  1. Run `mkdir -p domains/<domain>/streams/<name> && cp .agents/templates/stream.json domains/<domain>/streams/<name>/stream.json && cp <epic template> domains/<domain>/streams/<name>/epic.md`, where `<epic template>` is the profile template `epic` from step 1: `.agents/profiles/<profile>/epic.md`, or `.agents/profiles/<profile>/epic.<language>.md` when that file exists. For `ui-migration` with language `ru`: `cp .agents/profiles/ui-migration/epic.ru.md domains/<domain>/streams/<name>/epic.md`.
   2. In `domains/<domain>/streams/<name>/stream.json` change only two values: in `"key"` replace `<domain>/<stream>` with `<domain>/<name>`, and set `"profile"` to the chosen profile. Keep `"stage": "goal"`, `"scope": []` and `"approvals": []`. Example for stream `legacy-ops-risks` in domain `risks` with profile `ui-migration`:
      ```json
      {
@@ -80,12 +84,12 @@ description: Use to add an agent, skill, rule, role, domain, stream, map element
        "approvals": []
      }
      ```
-  3. In `domains/<domain>/streams/<name>/epic.md` replace `<Epic title>` with the title the person gives. Keep every section; the person fills them during the `goal` stage.
+  3. In `domains/<domain>/streams/<name>/epic.md` replace the placeholder in the first line with the title the person gives: `<Epic title>` in `epic.md`, `<Название эпика>` in `ui-migration/epic.ru.md`. Keep every section; the person fills them during the `goal` stage.
   4. Generated files: `domains/<domain>/streams/<name>/BREAKDOWN.md`.
 - map-element:
-  1. Run `mkdir -p domains/<domain>/<dir> && cp .agents/profiles/<profile>/<kind>.md domains/<domain>/<dir>/<name>.md`, with `<kind>` and `<dir>` from step 2. For `ui-migration`: `mkdir -p domains/<domain>/map && cp .agents/profiles/ui-migration/screen.md domains/<domain>/map/<name>.md`.
+  1. Run `mkdir -p domains/<domain>/<dir> && cp <element template> domains/<domain>/<dir>/<name>.md`, with `<dir>` from step 2 and `<element template>` the profile template `<kind>` from step 1: `.agents/profiles/<profile>/<kind>.md`, or `.agents/profiles/<profile>/<kind>.<language>.md` when that file exists. For `ui-migration`: `mkdir -p domains/<domain>/map && cp .agents/profiles/ui-migration/screen.md domains/<domain>/map/<name>.md`; with language `ru` copy `.agents/profiles/ui-migration/screen.ru.md` instead.
   2. In `domains/<domain>/<dir>/<name>.md` set `key: <prefix>:<domain>/<name>`. Ask the person for every other field in `fields` of the element; fields in `may_be_empty` may stay empty; a field with a `values` list takes one of those values. Write each value after `<field>: ` on its own line. Never invent a value. For `ui-migration`: set `key: screen:<domain>/<name>`, ask for `route`, `section`, `access`, `label` and `wave`, and for `parent` (a `screen:` key) and `story` (a `story:` key), which may stay empty; keep `kind: place`.
-  3. For each object in `tables` of the element, under `## <heading>` add one row per row the person names, in the person's order, with one cell per column; a cell of a column listed in `keys` is an element key. With no rows keep only the header and separator lines. For `ui-migration`: under `## Transitions` add one row `| <action> | <target> |` per transition; every target is a `screen:` key.
+  3. For each object in `tables` of the element, take `heading`, `columns` and `keys` in the workspace language as step 1 says. Under `## <heading>` add one row per row the person names, in the person's order, with one cell per column of `columns`, in that order; a cell of a column listed in `keys` is an element key. With no rows keep only the header and separator lines. For `ui-migration`: under `## Transitions` (`## Переходы` with language `ru`, columns `Действие`, `Цель`) add one row `| <action> | <target> |` per transition; every target is a `screen:` key.
   4. Only when the person chose a stream, edit `domains/<domain>/streams/<stream>/stream.json`, keeping two spaces of indentation per level, as `json.dumps(indent=2)` writes it:
      - Scope: when `scope` is the one line `  "scope": [],`, replace it with the three lines `  "scope": [`, `    "<prefix>:<domain>/<name>"`, `  ],`. Otherwise add a comma at the end of the last string line of `scope` and insert the line `    "<prefix>:<domain>/<name>"` directly above `  ],`.
      - Stage: the stage order is `goal`, `map`, `decomposition`, `ready`, `delivery`, `done`. When `stage` is `goal` or `map`, change nothing else. When `stage` is `decomposition`, `ready`, `delivery` or `done`:
@@ -364,21 +368,31 @@ alwaysApply: true
 ### Recipe: map element
 Use it for kind `map-element`, and for kind `domain`, whose new `MAP.md` has no elements yet. In `domains/<domain>/MAP.md` change only the lines strictly between a `<!-- map:<block>:begin -->` line and its `<!-- map:<block>:end -->` line; every other line stays as it is. When `MAP.md` lacks the marker lines of a block, skip that block.
 
-1. Blocks come from `elements` in `.agents/profiles/*/profile.json`: one block `map:<kind>s` per element kind, and one block per table of the kind, named `map:` + the table heading in lower case with spaces written as `-`. For `ui-migration` these are `map:screens` (fields `key`, `route`, `kind`, `section`, `parent`, `access`, `label`, `wave`, `story`) and `map:transitions` (table `Transitions`, columns `Action`, `Target`).
+1. Blocks come from `elements` in `.agents/profiles/*/profile.json`: one block `map:<kind>s` per element kind, and one block per table of the kind, named `map:` + the table heading in lower case with spaces written as `-`. Take every table `heading` and `columns` in the workspace language as step 1 says. For `ui-migration` these are `map:screens` (fields `key`, `route`, `kind`, `section`, `parent`, `access`, `label`, `wave`, `story`) and `map:transitions` (table `Transitions`, columns `Action`, `Target`); with language `ru` the second block is `map:переходы` (table `Переходы`, columns `Действие`, `Цель`).
 2. The `map:screens` block holds, in this order:
    - the header `| key | route | kind | section | parent | access | label | wave | story |`: `| `, the field names joined with ` | `, then ` |`;
    - the separator `|---|---|---|---|---|---|---|---|---|`: `|`, then `---|` once per field;
    - one row per element file `domains/<domain>/<dir>/*.md`, with `<dir>` from the element in `profile.json` (`map` for `ui-migration`): `| `, its frontmatter values in field order joined with ` | `, then ` |`. Copy every value verbatim without surrounding quotes; join a list (`[a, b]` or lines starting with `  - `) with `, `; write a missing or empty value as the empty string, which gives two spaces between bars (`|  |`).
-3. The `map:transitions` block holds, in this order:
-   - the header `| From | Action | Target |`: `| From | `, the table columns joined with ` | `, then ` |`;
-   - the separator `|---|---|---|`;
-   - for each element file, one row per row of its `## Transitions` table, in the order of that file: `| <element key> | <Action> | <Target> |`, each cell with surrounding spaces removed. An element whose table has no rows adds nothing.
+3. The block of a table, `map:transitions` for `ui-migration`, holds, in this order:
+   - the header `| From | Action | Target |`: `| `, the first column name, ` | `, the table columns joined with ` | `, then ` |`. Take the first column name from `map_doc.from_column` in the `profile.json` that declares the element kind, in the workspace language as step 1 says; when it is absent, use `From`. For `ui-migration` with language `ru` the header is `| Откуда | Действие | Цель |`;
+   - the separator `|---|---|---|`: `|`, then `---|` once per column plus one;
+   - for each element file, one row per row of its `## <heading>` table (`## Transitions`, or `## Переходы` with language `ru`), in the order of that file: `| <element key> | ` followed by its cells in the order of the profile columns, joined with ` | `, then ` |`, each cell with surrounding spaces removed. An element whose table has no rows adds nothing.
 4. Order: elements go in ascending order of file name (`<slug>.md`), compared character by character by character code; for example `limit-card.md` comes before `limit.md`, because `-` sorts before `.`. In `map:transitions` the rows of one element stay together and follow the same element order.
 5. To add one element:
    - When a block is empty, that is its begin line is directly followed by its end line, first write its header and separator lines between them.
    - In `map:screens` insert the new row directly above the first row whose file name sorts after the new file name, or directly above the end line when there is none.
-   - In `map:transitions` insert the new element's rows, in file order, directly above the rows of the first element whose file name sorts after the new one, or directly above the end line when there is none.
+   - In each table block insert the new element's rows, in file order, directly above the rows of the first element whose file name sorts after the new one, or directly above the end line when there is none.
 6. For a new domain there are no elements: each block gets only its header and separator lines.
+
+Examples A and B use language `en`. With language `ru` the second block of a new domain is:
+
+```
+## Переходы
+<!-- map:переходы:begin -->
+| Откуда | Действие | Цель |
+|---|---|---|
+<!-- map:переходы:end -->
+```
 
 Example A, new domain `risks`. The blocks of `domains/risks/MAP.md` after the recipe:
 
@@ -460,7 +474,21 @@ The blocks after. `limits.md` sorts after `alerts.md` and before `overview.md`:
 ```
 
 ### Recipe: empty BREAKDOWN.md
-Use it for kind `stream`. Write `domains/<domain>/streams/<name>/BREAKDOWN.md` with exactly these lines, replacing `<domain>` and `<name>`, and end the file with a newline after the last line:
+Use it for kind `stream`.
+
+1. Open `.agents/profiles/<profile>/profile.json` of the stream's profile and find its `breakdown` block. Take `<title>`, `<note>` and `<columns>` from its `title`, `note` and `columns`, each in the workspace language as step 1 says. When the block or one of these keys is absent, use the default:
+   - title `Breakdown of`;
+   - note `Generated by tools/generate.py from stories/*/story.md. Do not edit.`;
+   - columns `Story`, `Wave`, `Scope`, `Unmapped`, `Tracker`, `Depends`.
+2. Write `domains/<domain>/streams/<name>/BREAKDOWN.md` with exactly these lines and end the file with a newline after the last line:
+   - `# <title> stream:<domain>/<name>`;
+   - an empty line;
+   - `<note>`;
+   - an empty line;
+   - the header: `| `, the columns joined with ` | `, then ` |`;
+   - the separator `|---|---|---|---|---|---|`.
+
+With the defaults the file is:
 
 ```
 # Breakdown of stream:<domain>/<name>
@@ -471,7 +499,9 @@ Generated by tools/generate.py from stories/*/story.md. Do not edit.
 |---|---|---|---|---|---|
 ```
 
-Example for stream `legacy-ops-risks` in domain `risks`, file `domains/risks/streams/legacy-ops-risks/BREAKDOWN.md`:
+With profile `ui-migration` and language `ru` the first line is `# Разбивка stream:<domain>/<name>`, the note is `Сгенерировано tools/generate.py из stories/*/story.md. Не редактировать.` and the header is `| Стори | Волна | Экраны | Без экрана | Трекер | Зависит от |`.
+
+Example for stream `legacy-ops-risks` in domain `risks` with language `en`, file `domains/risks/streams/legacy-ops-risks/BREAKDOWN.md`:
 
 ```
 # Breakdown of stream:risks/legacy-ops-risks

@@ -20,13 +20,14 @@ Workspace `{{workspace_name}}` is the shared entry point for everyone working on
 | `docs/diagrams/` | diagrams, `diagram:<name>` | people |
 | `domains/<domain>/` | domain description and map | `extend` |
 | `domains/<domain>/map/` | map elements, one `screen:` file each; element-owned | the merge request of that element, `extend` |
-| `domains/<domain>/MAP.md` | the domain map; only the tables between `map:` markers are generated, the `Legacy trace` table and all other text are hand-written | people, generator |
+| `domains/<domain>/MAP.md` | the domain map; only the tables between `map:` markers are generated, the legacy trace table (the profile's `map_doc` heading in the workspace language: `Legacy trace`, `Трасса legacy` in a Russian workspace) and all other text are hand-written | people, generator |
 | `domains/<domain>/streams/<stream>/` | `stream.json`, `epic.md`, `stories/<slug>/story.md`, generated `BREAKDOWN.md` | `extend`, `task-new`, `task-decompose`; `BREAKDOWN.md` by the generator only |
 | `work/<ID>/` | one work record per tracker task | `work-record` |
 | `.agents/` | skills, rules, roles, agents, templates, kit stamp; `index.json` is generated | reviewed merge requests, `extend`; `index.json` by the generator only |
 | `.agents/profiles/` | stream profiles: element kinds, story shape, stage gates | kit updates, reviewed merge requests |
+| `.agents/repo-kits/<kind>/` | repository kits: `kit.json` and `files/` for the `.agents/` folder of repositories of that kind | reviewed merge requests |
 | `.claude/`, `.opencode/`, `.cursor/`, `CLAUDE.md` | tool adapters | generator only |
-| `tools/` | `check.py`, `generate.py` | kit updates |
+| `tools/` | `check.py`, `generate.py`, `repo_kit.py` | kit updates |
 | `.local/` | your personal layer, ignored by git | you |
 | `repos/` | clones of code repositories, ignored by git | `init`, `repos-sync` |
 
@@ -54,6 +55,8 @@ Follow the steps of a skill file exactly, in order.
 | `.agents/skills/task-decompose/SKILL.md` | split a stream's scope into stories |
 | `.agents/skills/task-context/SKILL.md` | gather the context of a story key or tracker id |
 | `.agents/skills/extend/SKILL.md` | add an agent, skill, rule, role, domain, stream, map element, stand or variable |
+| `.agents/skills/repo-kit-install/SKILL.md` | install a repository kit into a clone |
+| `.agents/skills/repo-kit-update/SKILL.md` | update a clone to a newer repository kit version |
 
 ## Changes
 - Every change to shared files goes through a branch and a merge request, and a person merges it. Details: `.agents/rules/merge-requests.md`.

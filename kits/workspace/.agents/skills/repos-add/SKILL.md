@@ -11,7 +11,12 @@ description: Use to add a code repository to this workspace's manifest, table an
    - `name`: default is the last path segment of the remote without `.git` (for `git@gitlab.example.com:team/payments-worker.git` it is `payments-worker`).
    - `roles`: ask for one or more names; the allowed names are the file names without `.md` printed by `ls .agents/roles/`.
    - `summary`: ask for one line.
-   - Never invent roles or summary. If the person gives none, ask again.
+   - `kit` (optional): only when the person names a repository kit kind. The allowed kinds are the folder names printed by `ls .agents/repo-kits/`. When that folder is missing or empty, tell the person that this workspace has no repository kits, and the entry gets no `kit`. When the person names a kind that is not in the list, tell them the allowed kinds and ask again. With a kind, collect its parameters:
+     1. Read `.agents/repo-kits/<kind>/kit.json`. Its `params` object lists every parameter, each with `description` and `pattern`.
+     2. For every parameter, in the order of `params`, show the person its name, `description` and `pattern`, and ask for the value.
+     3. The whole value must match `pattern`, not only a part of it: `ops` matches `[a-z]+`, `ops-1` does not. When `command -v python3` succeeds, check with `PATTERN='<pattern>' VALUE='<value>' python3 -c 'import os, re, sys; sys.exit(0 if re.fullmatch(os.environ["PATTERN"], os.environ["VALUE"]) else 1)'`; exit code 0 means it matches. The pattern and value travel in environment variables so the Python code never contains them. Inside the single-quoted shell values write each `'` as `'\''`; for example the value `it's` becomes `VALUE='it'\''s'`. On a value that does not match, tell the person the pattern and ask for that parameter again.
+     4. Do not install the kit into the clone in this skill. Installation is the `repo-kit-install` skill, run after this merge request is merged.
+   - Never invent roles, summary, a kit kind or kit parameter values. If the person gives no roles or no summary, ask again. The kit kind is optional: when the person names none, the entry gets no `kit` and you do not ask for one again.
 3. Set `forge`. Use the value the person gave. Otherwise find the remote host:
    - `git@host:path` (for example `git@gitlab.example.com:team/app.git`): the host is the text between `@` and the first `:`, here `gitlab.example.com`;
    - `ssh://git@host/path` or `ssh://host/path`: remove `ssh://`, then the text before the first `/`, without any `user@` before it and any `:port` after it;
@@ -32,9 +37,9 @@ description: Use to add a code repository to this workspace's manifest, table an
    - `git switch <default>`
    - `git pull --ff-only`
    - `git switch -c repos-add-<name>`
-7. Edit `repos.json`: append the entry as the last element of `repositories`. Keys go in the order `name`, `remote`, `forge`, `default_branch`, `roles`, `summary`. Use two-space indentation and put each list item on its own line, exactly as in the example below. When the list already has entries, add a comma after the closing `}` of the previous last entry. Inside every JSON string value write `"` as `\"` and `\` as `\\`; for example the summary `Reads "raw" C:\data` becomes `"summary": "Reads \"raw\" C:\\data"`.
+7. Edit `repos.json`: append the entry as the last element of `repositories`. Keys go in the order `name`, `remote`, `forge`, `default_branch`, `roles`, `summary`, and `kit` last when the person named a kit. `kit` is an object with the keys `kind` and `params`, in this order; `params` holds every parameter collected in step 2 in the order of the kit's `params`. Use two-space indentation and put each list item and each object key on its own line, exactly as in the example below. When the list already has entries, add a comma after the closing `}` of the previous last entry. Inside every JSON string value write `"` as `\"` and `\` as `\\`; for example the summary `Reads "raw" C:\data` becomes `"summary": "Reads \"raw\" C:\\data"`.
 8. If `command -v python3` succeeds, run `python3 tools/generate.py`. Otherwise apply `## Recipe: repository table`.
-9. Unless the person chose to add without cloning, run `git clone <remote> repos/<name>`.
+9. Unless the person chose to add without cloning, run `git clone <remote> repos/<name>`. Do not add or change any file in the clone, including `.agents/`.
 10. Run the check. First run `command -v python3`.
     - When it succeeds (Python is present): run `python3 tools/check.py`. Fix findings only in `repos.json` and `REPOSITORIES.md`, the files this skill changed, and run it again. Stop running it when no finding names either file. If findings in other files remain, do not fix them; list them in the report.
     - When it fails (Python is missing): do not run the check. Remember the line `check not run: python3 missing` for the report.
@@ -45,18 +50,23 @@ description: Use to add a code repository to this workspace's manifest, table an
     - the branch `repos-add-<name>`;
     - the merge request link, or the instruction to open it;
     - the clone result (`repos/<name>` cloned, or skipped without cloning);
+    - when the entry has `kit`: the kit kind is recorded but not installed; after the merge request is merged, install it with the `repo-kit-install` skill;
     - as the last line, the check result, or `check not run: python3 missing`.
 
 ## Recipe: repository table
 In `REPOSITORIES.md`, between `<!-- repos:begin -->` and `<!-- repos:end -->`, add one line directly above `<!-- repos:end -->`:
 
-`| <name> | <forge> | <default_branch> | <roles joined with ", "> | <summary> |`
+`| <name> | <forge> | <default_branch> | <roles joined with ", "> | <kit.kind> | <summary> |`
+
+When the entry has no `kit`, the `<kit.kind>` cell is empty: write the two spaces around it, `| backend, qa |  | Consumes`. Only `kit.kind` goes into the table; never write kit parameters there.
 
 Change nothing else in the file.
 
-Example. The person adds `payments-worker` with remote `git@gitlab.example.com:team/payments-worker.git`, forge `gitlab`, default branch `main`, roles `backend` and `qa`, summary `Consumes payment events and writes postings`.
+Example. The person adds two repositories, one after the other:
+- `payments-worker` with remote `git@gitlab.example.com:team/payments-worker.git`, forge `gitlab`, default branch `main`, roles `backend` and `qa`, summary `Consumes payment events and writes postings`, no kit;
+- `abs-operations` with remote `git@gitlab.example.com:team/abs-operations.git`, forge `gitlab`, default branch `master`, role `frontend`, summary `Operations micro frontend`, kit `mfe`. The `mfe` kit declares `MFE`, `BFF` and `PREFIX` in this order; the person gives `abs-operations`, `abs-operations-bff` and `ops`.
 
-`repos.json` after adding:
+`repos.json` after adding both:
 
 ```json
 {
@@ -71,6 +81,24 @@ Example. The person adds `payments-worker` with remote `git@gitlab.example.com:t
         "qa"
       ],
       "summary": "Consumes payment events and writes postings"
+    },
+    {
+      "name": "abs-operations",
+      "remote": "git@gitlab.example.com:team/abs-operations.git",
+      "forge": "gitlab",
+      "default_branch": "master",
+      "roles": [
+        "frontend"
+      ],
+      "summary": "Operations micro frontend",
+      "kit": {
+        "kind": "mfe",
+        "params": {
+          "MFE": "abs-operations",
+          "BFF": "abs-operations-bff",
+          "PREFIX": "ops"
+        }
+      }
     }
   ]
 }
@@ -80,8 +108,8 @@ Table block in `REPOSITORIES.md` before:
 
 ```
 <!-- repos:begin -->
-| Name | Forge | Default branch | Roles | Summary |
-|---|---|---|---|---|
+| Name | Forge | Default branch | Roles | Kit | Summary |
+|---|---|---|---|---|---|
 <!-- repos:end -->
 ```
 
@@ -89,9 +117,10 @@ Table block in `REPOSITORIES.md` after:
 
 ```
 <!-- repos:begin -->
-| Name | Forge | Default branch | Roles | Summary |
-|---|---|---|---|---|
-| payments-worker | gitlab | main | backend, qa | Consumes payment events and writes postings |
+| Name | Forge | Default branch | Roles | Kit | Summary |
+|---|---|---|---|---|---|
+| payments-worker | gitlab | main | backend, qa |  | Consumes payment events and writes postings |
+| abs-operations | gitlab | master | frontend | mfe | Operations micro frontend |
 <!-- repos:end -->
 ```
 
@@ -104,13 +133,14 @@ Table block in `REPOSITORIES.md` after:
 3. Only when `REPOSITORIES.md` is the sole conflicted file:
    - Run `git checkout --ours -- REPOSITORIES.md`. During a rebase `--ours` is the default branch version.
    - Regenerate the table: if `command -v python3` succeeds, run `python3 tools/generate.py`; otherwise rebuild the table by hand as below.
-   - Without Python, delete every row between the header separator `|---|---|---|---|---|` and `<!-- repos:end -->`. Then, for each entry of `repositories` in `repos.json`, from first to last, add its row directly above `<!-- repos:end -->` by `## Recipe: repository table`. Keep the two marker lines and the two header lines as they are. The table then has one row per entry in `repos.json` order.
+   - Without Python, replace the two header lines below `<!-- repos:begin -->` with `| Name | Forge | Default branch | Roles | Kit | Summary |` and `|---|---|---|---|---|---|`, and delete every row between that separator and `<!-- repos:end -->`. Then, for each entry of `repositories` in `repos.json`, from first to last, add its row directly above `<!-- repos:end -->` by `## Recipe: repository table`, with the `Kit` cell from the entry's `kit.kind` or empty. Keep the two marker lines. The table then has one row per entry in `repos.json` order.
    - Run `git add REPOSITORIES.md`.
    - Run `GIT_EDITOR=true git rebase --continue`.
 
 ## Without Python
 1. In step 8, apply `## Recipe: repository table` instead of `python3 tools/generate.py`.
-2. Skip `python3 tools/generate.py` and `python3 tools/check.py` everywhere, including `## Conflicts`.
-3. End the report with the line:
+2. In step 2, check each kit parameter value against its `pattern` with `printf '%s\n' '<value>' | grep -Ex -e '<pattern>'`; exit code 0 means the whole value matches. Write each `'` inside the quotes as `'\''`. When a pattern uses syntax `grep -E` does not support, such as `\d`, `\w`, `\s`, `(?` or a lazy `*?`, compare by reading instead. A value with a line break never matches.
+3. Skip `python3 tools/generate.py` and `python3 tools/check.py` everywhere, including `## Conflicts`.
+4. End the report with the line:
 
 check not run: python3 missing

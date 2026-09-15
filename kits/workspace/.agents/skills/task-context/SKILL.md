@@ -5,7 +5,8 @@ description: Use to gather the context of a story key or a tracker id - its stor
 # Task context
 
 ## Steps
-1. Go to the workspace root: the nearest directory, walking up from where you are, where `test -f .agents/kit.json` succeeds. Run every later command in that directory. This skill changes no file.
+1. Go to the workspace root: the nearest directory, walking up from where you are, where `test -f .agents/kit.json` succeeds. Run every later command in that directory. This skill changes no file. Read `params.language` from `.agents/kit.json`; when it is absent, use `en`. Below it is `<lang>`.
+   - A value in `profile.json` is either plain or a language object such as `{"en": "Transitions", "ru": "Переходы"}`. For a language object, take the value of `<lang>`, or the value of `en` when `<lang>` is not in the object.
 2. Ask the person for a story key or a tracker id, unless they already gave one. Below it is `<input>`.
 3. When `<input>` starts with `story:`, it is a story key of the form `story:<domain>/<slug>`; go to step 4. Otherwise it is a tracker id `<ID>`. Check it:
    - Read `id_pattern` from `tracker/tracker.json`. JSON doubles every backslash, so `\\d` in the file means `\d`.
@@ -23,17 +24,20 @@ description: Use to gather the context of a story key or a tracker id - its stor
    - When exactly one path is printed, that is the story path. Keep the "index is stale" line from step 4 for the report. The fix is `python3 tools/generate.py`; this skill does not run it.
    - When more than one path is printed, report all of them, say that the index is stale and the id is used by more than one story, and stop.
    - When nothing is found, answer `<input> is not in this workspace` and stop.
-6. Read the story file. The story path has the form `domains/<domain>/streams/<stream>/stories/<slug>/story.md`; take `<domain>`, `<stream>` and `<slug>` from it. The story key is `story:<domain>/<slug>`. Read its frontmatter: `type`, `wave`, `tracker`, `scope`, `depends`, `repos`, `decisions`, `mockups`. Remove the quotes around `tracker`, if any; use this bare value everywhere below. A list is written either as `key: [a, b]` or as `key:` followed by lines `  - a`; `key: []` and `key:` with nothing after it mean empty. Read the `## Goal` section.
+6. Read the story file. The story path has the form `domains/<domain>/streams/<stream>/stories/<slug>/story.md`; take `<domain>`, `<stream>` and `<slug>` from it. The story key is `story:<domain>/<slug>`. Read its frontmatter: `type`, `wave`, `tracker`, `scope`, `depends`, `repos`, `decisions`, `mockups`. Remove the quotes around `tracker`, if any; use this bare value everywhere below. A list is written either as `key: [a, b]` or as `key:` followed by lines `  - a`; `key: []` and `key:` with nothing after it mean empty.
 7. Read `domains/<domain>/streams/<stream>/stream.json`. Take `key`, `profile` and `stage`. When the file is missing, write `stream.json missing` instead of the stage.
+   - Find the summary section name: open `.agents/profiles/<profile>/profile.json` and take `story.summary_section`, resolved to `<lang>` as in step 1. When `story.summary_section` is absent, take the first entry of `story.sections`, resolved the same way. This name is `<section>`. For `ui-migration` it is `Goal` in an English workspace and `Цель` in a Russian workspace (`params.language` is `ru`).
+   - Read the `## <section>` section of the story and take its first non-empty line. When the section is absent, write `no <section> section`.
+   - When `stream.json` is missing or `test -f .agents/profiles/<profile>/profile.json` fails, write `no section name, stream.json missing` or `no section name, unknown profile <profile>` instead of that line.
 8. For each key in `scope`, in order:
    - A key has the form `<prefix>:<element domain>/<element slug>`.
-   - Find the element entry: open `.agents/profiles/<profile>/profile.json` and take the entry of `elements` whose `prefix` equals `<prefix>`. Its `dir` gives the path `domains/<element domain>/<dir>/<element slug>.md`, and its `tables` list the tables to copy.
+   - Find the element entry: open `.agents/profiles/<profile>/profile.json` and take the entry of `elements` whose `prefix` equals `<prefix>`. Its `dir` gives the path `domains/<element domain>/<dir>/<element slug>.md`, and its `tables` list the tables to copy. Resolve each table's `heading` and `columns` to `<lang>` as in step 1.
    - When there is no entry, the reason is one of: `stream.json missing` (step 7 found no file), `unknown profile <profile>` (`test -f .agents/profiles/<profile>/profile.json` fails) or `unknown prefix <prefix>` (no entry has that prefix). Then:
-     - For `screen:` keys, use the path `domains/<element domain>/map/<element slug>.md` and the table `Transitions`, and mark the key `path by convention: <reason>`.
+     - For `screen:` keys, use the path `domains/<element domain>/map/<element slug>.md`. For the table heading and columns, when `.agents/profiles/<profile>/profile.json` exists and has an `elements` entry whose `kind` is `screen`, take that entry's first table's `heading` and `columns`, resolved to `<lang>` as in step 1; otherwise use `Transitions` for the heading and `Action`, `Target` for the columns. For example, in a Russian `ui-migration` workspace this heading is `Переходы`. Mark the key `path by convention: <reason>`.
      - For any other prefix, write `<key>: no path, <reason>` and take the next key. Do not look for its file or its transitions.
    - When `test -f <path>` fails, write `missing: <path>` for this key and take the next key.
    - Read the frontmatter values `kind`, `route` and `label` when present.
-   - For each table, for example `Transitions`, find the `## <heading>` section of the file and copy every row of its first table: for `Transitions`, `Action` and `Target`. When the section is absent, write `no <heading> section`.
+   - For each table, for example `Transitions`, find the `## <heading>` section of the file and copy every row of its first table under the resolved `columns`: for `Transitions`, `Action` and `Target` in an English workspace, `Действие` and `Цель` in a Russian workspace. When the section is absent, write `no <heading> section`.
 9. For each value in `repos`, remove a leading `repo:`; the rest is `<name>`. Open `repos.json` and find the entry of `repositories` whose `name` equals `<name>`. Take its `status`, `remote` and `default_branch`. A `planned` repository may have no `remote`; write `no remote` then, and `status not set` when `status` is absent. When there is no such entry, write `not in repos.json`. Run `ls -d repos/<name> 2>/dev/null` to say whether a local clone exists; empty output means absent.
 10. For each key `adr:<NNNN>` in `decisions`, run `ls docs/adr/<NNNN>-*.md 2>/dev/null`. Read the frontmatter `title` and `status` of each printed file. When more than one file is printed, report every one and say `several ADR files share number <NNNN>`. When nothing is printed, write `missing`.
 11. For each key in `mockups`, open `docs/diagrams/external.json` and find the entry of `diagrams` whose `key` equals it. Take its `url`. When there is no such entry, write `not in external.json`.
@@ -45,13 +49,13 @@ description: Use to gather the context of a story key or a tracker id - its stor
 Story: <story key> (<story path>)
 Tracker: <tracker without quotes, or "no tracker id">
 Type: <type>; wave: <wave>; depends: <depends joined with ", " or "none">
-Goal: <first line of the Goal section>
+Goal: <first line of the summary section from step 7>
 Stream: <stream key> (<stream.json path>), profile <profile>, stage <stage>
 Scope:
 - <element key> (<element path>): kind <kind>; route <route>; label <label>[; path by convention: <reason>]
-  | Action | Target |
-  |---|---|
-  | <action> | <target> |
+  | <column> | <column> | ... |
+  |---|---| ... |
+  | <cell> | <cell> | ... |
 - <element key>: no path, <reason>
 Repositories:
 - <name>: status <status>, remote <remote or "no remote">, default branch <default_branch>, clone <present or absent>

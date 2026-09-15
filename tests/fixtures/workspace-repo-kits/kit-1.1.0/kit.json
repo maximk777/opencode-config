@@ -1,0 +1,11 @@
+{
+  "name": "svc",
+  "version": "1.1.0",
+  "target": ".agents",
+  "params": {
+    "SERVICE": {
+      "description": "Service name as it appears in the repository",
+      "pattern": "[a-z][a-z0-9-]*"
+    }
+  }
+}

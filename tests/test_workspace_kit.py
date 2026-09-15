@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 import unittest
 
-from workspace_helpers import DEFAULT_PARAMS, create_workspace, kit_command
+from workspace_helpers import DEFAULT_PARAMS, create_workspace, kit_command, run_check
 
 KIT = REPO / "kits/workspace"
 
@@ -96,6 +96,14 @@ class CreateTest(unittest.TestCase):
     def test_tracker_url_without_id(self):
         self.assert_param_rejected(dict(DEFAULT_PARAMS, tracker_url="https://tracker.example/i/"), "tracker_url")
 
+    def test_language_parameter(self):
+        ws = create_workspace(self.tmp, params=dict(DEFAULT_PARAMS, language="ru"))
+        stamp = json.loads((ws / ".agents/kit.json").read_text(encoding="utf-8"))
+        self.assertEqual(stamp["params"], dict(DEFAULT_PARAMS, language="ru"))
+
+    def test_invalid_language(self):
+        self.assert_param_rejected(dict(DEFAULT_PARAMS, language="russian"), "language")
+
     def test_generator_failure(self):
         kit = self.copy_kit()
         (kit / "tools/generate.py").write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
@@ -106,6 +114,15 @@ class CreateTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(target.exists())
         self.assertEqual([p.name for p in parent.iterdir() if p.name.startswith(".workspace-kit-")], [])
+
+    def test_example_repository_kit_is_valid(self):
+        ws = create_workspace(self.tmp)
+        example = ws / ".agents/repo-kits/example"
+        shutil.copytree(ws / ".agents/templates/repo-kit", example)
+        _, lines, stderr = run_check(ws)
+        self.assertNotIn("Traceback", stderr)
+        self.assertNotIn("internal error", stderr)
+        self.assertEqual([line for line in lines if " repo-kit " in line], [])
 
 
 if __name__ == "__main__":

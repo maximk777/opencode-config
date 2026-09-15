@@ -14,6 +14,7 @@ description: Use to create one story in a stream from the stream profile's story
    - `wave`: a number, for example `2`.
    - depends: story keys this story waits for, for example `story:operations/login`, or none.
    - repos: repository keys, for example `repo:reports-bff`, or none.
+   - `title`: the story title for the `# ` title line of the story template, for example `Reports`. Only needed when the template has such a line (step 5 chooses the template), for example `# [СО] <Название стори>` in `story.ru.md`.
 
    Use every value the person gave. Derive the others from the files by the rules below, and do not ask the person to confirm a derived value: the person corrects derived values in the merge request review. Ask the person only for a value that is neither given nor derivable, and wait for the answer. Never invent a value.
    - Stream. When the person named the domain and the stream, use them. Otherwise run `ls domains/*/streams/*/stream.json`; each printed path `domains/<domain>/streams/<stream>/stream.json` is one stream. Keep the streams whose domain folder, stream folder or `key` in `stream.json` the request names. When the request names no stream, keep instead the streams that have an uncovered scope key (see Scope). When exactly one stream is left, take its `<domain>` and `<stream>`. When several or none are left, ask the person for the domain and the stream.
@@ -21,6 +22,7 @@ description: Use to create one story in a stream from the stream profile's story
    - `wave`. For each scope key, open its element file (step 8 gives the path) and read its `wave:` line. Take the lowest number. Without scope keys, ask the person.
    - `slug`. When the scope has exactly one key, take the text after `/` in that key, for example `card` for `screen:demo/card`; step 7 checks that it is free. Otherwise ask the person.
    - depends and repos: none, unless the person named them.
+   - `title`. When the person gave a title, use it. Otherwise, when the scope has exactly one key, take the `label:` value of its element file (step 8 gives the path). Otherwise (several keys, no keys, or an empty `label:`) ask the person for the title. Never invent a title.
    - `type`, `tracker`, `decisions` and `mockups` are not asked: step 12 keeps `type`, `decisions` and `mockups` from the template, and `tracker` stays empty unless step 5 needs one.
 3. Check the slug: run `printf '%s\n' '<slug>' | grep -Ex '[a-z0-9-]+'`. When it prints nothing, ask the person for another slug.
 4. Find the workspace default branch: run `git symbolic-ref --short refs/remotes/origin/HEAD` and remove the `origin/` prefix; when the command fails, use `main`. Call it `<default>`. Then run, one by one:
@@ -28,8 +30,12 @@ description: Use to create one story in a stream from the stream profile's story
    - `GIT_TERMINAL_PROMPT=0 git pull --ff-only`
    The checks in steps 5 to 9 run after the pull, so they see the fresh default branch.
 5. Run `test -f domains/<domain>/streams/<stream>/stream.json`. When it fails, stop, tell the person the stream does not exist, and change nothing. Otherwise read the file and take `profile`, `stage` and the `scope` list.
+   - Find the workspace language `<language>`: open `.agents/kit.json` and read `params.language`. When the file, `params` or `language` is missing, `<language>` is `en`.
+   - Find the story template `<template>`: when `<language>` is not `en` and `test -f .agents/profiles/<profile>/story.<language>.md` succeeds, it is `.agents/profiles/<profile>/story.<language>.md`; otherwise `.agents/profiles/<profile>/story.md`. For language `ru` in profile `ui-migration` it is `story.ru.md`.
+   - Values in `.agents/profiles/<profile>/profile.json` may be language objects such as `{"en": "Open questions", "ru": "Открытые вопросы"}`. Wherever this skill reads a value from `profile.json`, take the `<language>` value of such an object, or its `en` value when it has no `<language>` key.
+   - Find the open questions section `<open questions>`: the `section` of the gate `"gate": "no_open_questions"` in `stages` of `profile.json`, for example `Open questions` (en) or `Открытые вопросы` (ru). When no such gate exists, there is no open questions section.
    - When `stage` is `goal`, `map`, `decomposition` or `ready`: the story gets no tracker id. Go to step 6.
-   - When `stage` is `delivery` or `done`: the `ready` stage is closed, so `check` requires a tracker id and an empty `## Open questions` for the new story too. Ask the person for the tracker id `<tracker>` and wait for the answer. When the person gives none, stop, tell them a stream at stage `<stage>` needs a tracker id for every story, and change nothing. Do not create any file or branch.
+   - When `stage` is `delivery` or `done`: the `ready` stage is closed, so `check` requires a tracker id and an empty `## <open questions>` section for the new story too. Ask the person for the tracker id `<tracker>` and wait for the answer. When the person gives none, stop, tell them a stream at stage `<stage>` needs a tracker id for every story, and change nothing. Do not create any file or branch.
    - Check `<tracker>`: read `id_pattern` from `tracker/tracker.json` (JSON doubles every backslash, so `\\d` in the file means `\d`), write every `\d` as `[0-9]`, and run `printf '%s\n' '<tracker>' | grep -Ex '<rewritten pattern>'`. When it prints nothing, ask the person for another id. When `tracker/tracker.json` or `id_pattern` is missing, stop, tell the person, and change nothing.
    - When `<tracker>` contains a `"` or a `\` character, ask the person for another id: `.agents/index.json` stores such ids escaped, so the next check cannot find them.
    - Run `grep -F '  "<tracker>":' .agents/index.json`. When it prints a line, the id belongs to another story: ask the person for another id.
@@ -44,7 +50,7 @@ description: Use to create one story in a stream from the stream profile's story
    - For each repos key `repo:<name>`, run `grep -F '"name": "<name>"' repos.json`. It must print a line.
    - Correct or drop, together with the person, every key that fails. Never keep a key that does not exist.
 10. Run `git switch -c story-<domain>-<slug>`.
-11. Run `mkdir -p domains/<domain>/streams/<stream>/stories/<slug> && cp .agents/profiles/<profile>/story.md domains/<domain>/streams/<stream>/stories/<slug>/story.md`.
+11. Run `mkdir -p domains/<domain>/streams/<stream>/stories/<slug> && cp <template> domains/<domain>/streams/<stream>/stories/<slug>/story.md`.
 12. Edit the frontmatter of the new `story.md`. Keep every line of the template in its order and change only these lines:
     - `key: story:<domain>/<slug>`;
     - `wave: <wave>`;
@@ -52,12 +58,22 @@ description: Use to create one story in a stream from the stream profile's story
     - `depends` and `repos`: the same form, `<field>:` followed by `  - <key>` lines, or `<field>: []` when empty;
     - `tracker`: when step 5 gave a `<tracker>`, `tracker: <tracker>`; otherwise leave `tracker:` empty;
     - leave `type`, `decisions` and `mockups` as the template has them.
-    Keep every `## ` heading of the template and replace the placeholder text under each of them. Where the person gave you the words for a section, write those words. Otherwise write:
-    - `## Goal`: with scope keys, one line `Deliver <key> (<label>, <route>).`, listing every scope key as `<key> (<label>, <route>)` joined with `, `; without keys, the line `<reason>.`;
-    - `## Scope`: with scope keys, one line `<key>: <label>, <route>` per key; without keys, the line `Unmapped: <reason>`;
-    - `## Acceptance criteria`, `## Verification` and `## Out of scope`: the one line `Written in the merge request review.`;
-    - `## Open questions`: `None.`.
-    Take `<label>` and `<route>` from the `label:` and `route:` lines of the element file from step 8. When the element file has no such line or it is empty, leave that part out, for example `<key>` alone. For `screen:demo/card` with label `Card` and route `/card`, `## Scope` gets `screen:demo/card: Card, /card`. When `stage` is `delivery` or `done`, the text under `## Open questions` must be `None.` or nothing: keep `None.` and write no questions there, and tell the person in the report to resolve open questions before merging.
+    Keep every `## ` heading of the template and replace the placeholder text under each of them. The sections are those of `<template>`, in their order; their names are the `story.sections` list of `profile.json`. When the template has a `# ` title line, replace its placeholder in angle brackets with `<title>` from step 2 and keep the rest of the line: `# [СО] <Название стори>` becomes `# [СО] Отчёты` for title `Отчёты`. Where the person gave you the words for a section, write those words. Otherwise write:
+    - the summary section: the section named by `story.summary_section` of `profile.json` (in `<language>` as step 5 says), or the first item of `story.sections` when `summary_section` is absent. It gets the goal. With scope keys, one line `Deliver <key> (<label>, <route>).`, listing every scope key as `<key> (<label>, <route>)` joined with `, `; without keys, the line `<reason>.`;
+    - the section whose template text names the covered screens (it mentions `screen:` keys or the `scope` field): with scope keys, one line `<key>: <label>, <route>` per key; without keys, the line `Unmapped: <reason>`;
+    - `## <open questions>`: `None.`;
+    - every other section: the one line `Written in the merge request review.`.
+    Take `<label>` and `<route>` from the `label:` and `route:` lines of the element file from step 8. When the element file has no such line or it is empty, leave that part out, for example `<key>` alone. For `screen:demo/card` with label `Card` and route `/card`, the screens section gets `screen:demo/card: Card, /card`. When `stage` is `delivery` or `done`, the text under `## <open questions>` must be `None.` or nothing: keep `None.` and write no questions there, and tell the person in the report to resolve open questions before merging.
+
+    Sections without text from the person, for scope `screen:demo/card` with label `Card` and route `/card`:
+
+    | English (`story.md`) | Russian (`story.ru.md`) | Text |
+    |---|---|---|
+    | no title line | `# [СО] <Название стори>` | the title: `# [СО] Card` |
+    | `## Goal` (summary section) | `## Цель` (summary section) | `Deliver screen:demo/card (Card, /card).` |
+    | `## Scope` | `## Функциональные требования` | `screen:demo/card: Card, /card` |
+    | `## Acceptance criteria`, `## Verification`, `## Out of scope` | `## Заинтересованные стороны`, `## Описание бизнес-потребности`, `## Нефункциональные требования`, `## Задачи внутри стори`, `## Этапы` | `Written in the merge request review.` |
+    | `## Open questions` | `## Открытые вопросы` | `None.` |
 
     Example with a scope:
     ```
@@ -144,14 +160,35 @@ Use this only when `python3` is missing. The result equals what `python3 tools/g
    An empty value leaves an empty cell with two spaces between the bars: `|  |`. For example scope `[]` with unmapped `BFF defects` and no tracker and no depends gives `| story:operations/bff-defects | 3 |  | BFF defects |  |  |`.
 2. Open `domains/<domain>/streams/<stream>/BREAKDOWN.md`. When it does not exist, create it with exactly these six lines, each ending with a newline:
    ```
-   # Breakdown of stream:<domain>/<stream>
+   # <title> stream:<domain>/<stream>
+
+   <note>
+
+   | <column 1> | <column 2> | <column 3> | <column 4> | <column 5> | <column 6> |
+   |---|---|---|---|---|---|
+   ```
+   Take `<title>`, `<note>` and the six columns from the `breakdown` block of `.agents/profiles/<profile>/profile.json` (`title`, `note` and `columns` in their order), in `<language>` as step 5 says. When `profile.json` has no `breakdown` block, use title `Breakdown of`, note `Generated by tools/generate.py from stories/*/story.md. Do not edit.` and columns `Story`, `Wave`, `Scope`, `Unmapped`, `Tracker`, `Depends`. The row cells keep the order of step 1 whatever the column names are.
+
+   English (`en`, and every profile without a `breakdown` block):
+   ```
+   # Breakdown of stream:operations/migration
 
    Generated by tools/generate.py from stories/*/story.md. Do not edit.
 
    | Story | Wave | Scope | Unmapped | Tracker | Depends |
    |---|---|---|---|---|---|
    ```
-   (The blank lines count: the file starts with the title line, a blank line, the `Generated` line, a blank line, the header line and the separator line.)
+   Russian (`ru`, profile `ui-migration`):
+   ```
+   # Разбивка stream:operations/migration
+
+   Сгенерировано tools/generate.py из stories/*/story.md. Не редактировать.
+
+   | Стори | Волна | Экраны | Без экрана | Трекер | Зависит от |
+   |---|---|---|---|---|---|
+   ```
+
+   (The blank lines count: the file starts with the title line, a blank line, the note line, a blank line, the header line and the separator line.)
 3. Rows follow the separator line in ascending slug order. Compare your slug with the slug of each row (the text after `/` in its first cell) character by character from the left; the first different character decides in this order: `-`, then digits `0` to `9`, then letters `a` to `z`. When one slug is the start of the other, the shorter one comes first. So `login` < `reports` < `reports-v2` < `reports2`.
 4. Insert your row directly above the first row whose slug comes after yours. When no row comes after yours, add it as the last line of the file. Change nothing else. The file ends with a newline.
 

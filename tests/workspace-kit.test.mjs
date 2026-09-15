@@ -69,25 +69,41 @@ test("kit.json has name, semver version and existing templated files", () => {
 test("kit contains lifecycle templates, the ui-migration profile and task skills", () => {
   const paths = [
     ".agents/templates/stream.json",
-    ".agents/templates/epic.md",
-    ".agents/templates/MAP.md",
     ".agents/profiles/ui-migration/profile.json",
     ".agents/profiles/ui-migration/screen.md",
     ".agents/profiles/ui-migration/story.md",
+    ".agents/profiles/ui-migration/epic.md",
+    ".agents/profiles/ui-migration/MAP.md",
+    ".agents/profiles/ui-migration/screen.ru.md",
+    ".agents/profiles/ui-migration/story.ru.md",
+    ".agents/profiles/ui-migration/front.ru.md",
+    ".agents/profiles/ui-migration/api.ru.md",
+    ".agents/profiles/ui-migration/epic.ru.md",
+    ".agents/profiles/ui-migration/MAP.ru.md",
     ".agents/skills/task-new/SKILL.md",
     ".agents/skills/task-decompose/SKILL.md",
     ".agents/skills/task-context/SKILL.md",
+    ".agents/repo-kits/.gitkeep",
+    ".agents/templates/repo-kit/kit.json",
+    "tools/repo_kit.py",
+    ".agents/skills/repo-kit-install/SKILL.md",
+    ".agents/skills/repo-kit-update/SKILL.md",
   ];
   for (const rel of paths) {
     assert.ok(existsSync(path.join(KIT, rel)), `kit path missing: ${rel}`);
   }
+  for (const rel of [".agents/templates/epic.md", ".agents/templates/MAP.md", ".agents/profiles/ui-migration-ru"]) {
+    assert.ok(!existsSync(path.join(KIT, rel)), `kit path must not exist: ${rel}`);
+  }
   const profile = JSON.parse(readFileSync(path.join(KIT, ".agents/profiles/ui-migration/profile.json"), "utf8"));
   assert.equal(profile.name, "ui-migration");
+  assert.ok(Array.isArray(profile.story?.sections?.en), "story.sections has no en list");
+  assert.ok(Array.isArray(profile.story?.sections?.ru), "story.sections has no ru list");
 });
 
-test("kit version is at least 0.2.0", () => {
+test("kit version is at least 0.4.0", () => {
   const version = JSON.parse(readFileSync(path.join(KIT, "kit.json"), "utf8")).version;
-  assert.ok(!semverGreater("0.2.0", version), `kit version ${version} is below 0.2.0`);
+  assert.ok(!semverGreater("0.4.0", version), `kit version ${version} is below 0.4.0`);
 });
 
 test("every kit skill has frontmatter, numbered steps and Without Python", () => {
