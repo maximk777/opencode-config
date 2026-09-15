@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+# Serves OpenViking Studio on 127.0.0.1:1934 with the user key added on the server side, so the browser needs no login.
+import http.server
+import sys
+import urllib.error
+import urllib.request
+import webbrowser
+from pathlib import Path
+
+UPSTREAM = "http://127.0.0.1:1933"
+PORT = 1934
+KEY_FILE = Path.home() / ".openviking" / "mcp-key"
+DROP = {
+    "connection", "keep-alive", "transfer-encoding", "upgrade", "te", "trailer", "host", "content-length",
+    "accept-encoding", "authorization", "x-api-key", "x-openviking-account", "x-openviking-user",
+}
+
+
+def upstream_headers(headers, key):
+    out = {k: v for k, v in headers.items() if k.lower() not in DROP}
+    out["Authorization"] = f"Bearer {key}"
+    return out
+
+
+def allowed_origin(origin, port=PORT):
+    # The key is injected for every request, so pages from other sites must not be able to use this port.
+    return origin is None or origin in (f"http://127.0.0.1:{port}", f"http://localhost:{port}")
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def handler(key, upstream=UPSTREAM, port=PORT):
+    opener = urllib.request.build_opener(NoRedirect)
+
+    class Proxy(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def forward(self):
+            if not allowed_origin(self.headers.get("Origin"), port):
+                self.send_error(403, "foreign origin")
+                return
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length) if length else None
+            req = urllib.request.Request(upstream + self.path, data=body, method=self.command,
+                                         headers=upstream_headers(self.headers, key))
+            try:
+                res = opener.open(req, timeout=300)
+            except urllib.error.HTTPError as e:
+                res = e
+            except urllib.error.URLError as e:
+                self.send_error(502, f"OpenViking is not reachable: {e.reason}")
+                return
+            self.send_response(res.status if hasattr(res, "status") else res.code)
+            for k, v in res.headers.items():
+                if k.lower() not in ("connection", "transfer-encoding", "keep-alive"):
+                    self.send_header(k, v)
+            self.end_headers()
+            if self.command != "HEAD":
+                while chunk := res.read(65536):
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+
+        do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = do_OPTIONS = do_HEAD = forward
+
+    return Proxy
+
+
+def main():
+    if not KEY_FILE.exists():
+        sys.exit(f"ov-studio: {KEY_FILE} is missing; run bin/ov-up")
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), handler(KEY_FILE.read_text().strip()))
+    url = f"http://127.0.0.1:{PORT}/studio"
+    print(f"ov-studio: {url} (Ctrl+C to stop)")
+    if "--no-open" not in sys.argv:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

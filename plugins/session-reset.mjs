@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { tool } from "@opencode-ai/plugin";
 import { isScopedAgent, buildCompactionContext, summaryPayload, safeFacts, modelFromTier } from "../lib/session-reset-core.mjs";
 
@@ -6,15 +8,22 @@ const TOKEN_BUDGET = 1500;
 const OV = "http://127.0.0.1:1933";
 const agentBySession = new Map();
 
-const ovHeaders = () => ({
-  "content-type": "application/json",
-  authorization: `Bearer ${process.env.OPENVIKING_API_KEY ?? ""}`,
-});
+// The key file works when OpenCode is started outside an interactive shell, where the env variable is missing.
+const ovHeaders = async () => {
+  const key = process.env.OPENVIKING_API_KEY || (await readFile(join(homedir(), ".openviking", "mcp-key"), "utf8").catch(() => "")).trim();
+  return { "content-type": "application/json", authorization: `Bearer ${key}` };
+};
+
+// Memory URIs are per user; the server names the user that owns the key.
+const ovUser = async (headers) => {
+  const res = await fetch(`${OV}/api/v1/system/status`, { headers }).catch(() => null);
+  return res?.ok ? (await res.json()).result?.user : undefined;
+};
 
 async function findFacts(query) {
   const res = await fetch(`${OV}/api/v1/search/find`, {
     method: "POST",
-    headers: ovHeaders(),
+    headers: await ovHeaders(),
     body: JSON.stringify({ query, limit: 6 }),
   });
   if (!res.ok) throw new Error(`find ${res.status}`);
@@ -78,11 +87,18 @@ export const SessionReset = async ({ client, $ }) => {
       const summary = last?.parts?.map((p) => p.text ?? "").join("\n").trim();
       const payload = summaryPayload({ agent, summary });
       if (!payload || !summary) return;
-      await fetch(`${OV}/api/v1/content/write`, {
-        method: "POST",
-        headers: ovHeaders(),
-        body: JSON.stringify({ uri: `viking://user/memories/sessions/${sessionID}.md`, content: payload.text, mode: "upsert" }),
-      }).catch(() => {});
+      const headers = await ovHeaders();
+      const user = await ovUser(headers);
+      const res = user
+        ? await fetch(`${OV}/api/v1/content/write`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ uri: `viking://user/${user}/memories/sessions/${sessionID}.md`, content: payload.text, mode: "replace" }),
+          }).catch(() => null)
+        : null;
+      if (!res?.ok) {
+        await client.app?.log?.({ body: { service: "session-reset", level: "warn", message: `session summary not saved: ${user ? `write ${res?.status ?? "failed"}` : "OpenViking user unknown"}` } }).catch(() => {});
+      }
     },
 
     tool: {

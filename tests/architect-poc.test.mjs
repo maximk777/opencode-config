@@ -26,8 +26,7 @@ test("PoC templates carry criterion and verdict", () => {
 
 test("architect can run PoCs locally", () => {
   const bash = JSON.parse(readFileSync(`${ROOT}opencode.json`, "utf8")).agent.architect.permission.bash;
-  assert.equal(bash["git worktree add*"], "allow");
-  assert.equal(bash["docker compose *"], "allow");
+  assert.equal(bash["*"], "allow");
 });
 
 test("architect prompt loads the PoC skill", () => {

@@ -28,7 +28,8 @@ Pass long texts through the humanize skill. This covers ADRs, proposals, designs
 
 ## Shell
 
-Read files with the read, grep and glob tools. In bash, primary agents need the user's approval for redirections, sed, awk, xargs, find -exec and git -C.
+Read files with the read, grep and glob tools. Bash commands run without approval; env, printenv, .env files and `opencode debug` stay denied.
+Commits and pushes stay guarded: the orchestrator asks, every other custom agent is denied, except setup-improver which may commit the setup repository.
 Use `cd <dir> && git <command>` instead of git -C.
 
 ## Verification

@@ -19,3 +19,18 @@ check.py --remaining on story-demo-card:
 ```
 stream:demo/main decomposition approval: domains/demo/streams/main/stream.json:1 no approval mark for stage decomposition with by and a YYYY-MM-DD date
 ```
+
+## 2026-09-14 13:09 UTC zai-coding-plan/glm-5.3-flash PASS
+
+check.py --remaining on story-demo-card:
+```
+stream:demo/main decomposition approval: domains/demo/streams/main/stream.json:1 no approval mark for stage decomposition with by and a YYYY-MM-DD date
+```
+
+## 2026-09-15 07:17 UTC zai-coding-plan/glm-5.3-flash FAIL
+- branch work/TASK-1 was not pushed
+
+check.py --remaining on story-demo-card:
+```
+stream:demo/main decomposition approval: domains/demo/streams/main/stream.json:1 no approval mark for stage decomposition with by and a YYYY-MM-DD date
+```

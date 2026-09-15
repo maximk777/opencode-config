@@ -58,13 +58,12 @@ test("primary agents read freely", () => {
   }
 });
 
-test("primary agents cannot write the work repository through bash without asking", () => {
+test("primary agents run writing and project commands without asking", () => {
   for (const a of PRIMARY) {
-    expectAll(a, "bash", "ask", [
+    expectAll(a, "bash", "allow", [
       "echo x > internal/a.go",
       "cat a >> b",
       "printf '%s' x >f",
-      "IFS=x rm -rf internal",
       "sed -n -i s/a/b/ f",
       "sed -n 'w out' f",
       "awk '{print > \"f\"}' x",
@@ -78,11 +77,16 @@ test("primary agents cannot write the work repository through bash without askin
       "git branch -D main",
       "git -C . reset --hard",
       "git checkout -- a.go",
+      "git checkout -b feature/x",
       "rm -rf x/bin/waves y",
-      "rm -rf x ~/.config/opencode/bin/waves y",
       "rg --pre rm x",
       "openspec init .",
+      "openspec validate --strict",
       "tee out",
+      "make build",
+      "curl -s localhost:3939/api/health",
+      "docker compose up -d",
+      "go mod tidy",
       "cat a > f 2>/dev/null",
       "ls > f 2>&1",
       "ls 2>/dev/null > f",
@@ -109,7 +113,7 @@ test("only setup-improver commits, and never through git -C", () => {
   expectAll("setup-improver", "bash", "deny", ["git -C /w commit -m x", "git push"]);
 });
 
-test("flow scripts are allowed by path prefix only", () => {
+test("flow scripts run without asking", () => {
   expectAll("orchestrator", "bash", "allow", [
     "~/.config/opencode/bin/waves ~/specs/p/openspec/changes/x",
     `${HOME}/.config/opencode/bin/change-state ~/specs/p x`,
@@ -119,9 +123,9 @@ test("flow scripts are allowed by path prefix only", () => {
     "~/.config/opencode/bin/check-commit-msg",
     "~/.config/opencode/bin/ov-sync p",
     "~/.config/opencode/bin/specs-commit p 'docs(x): add plan'",
+    "~/.config/opencode/bin/specs-commit p 'docs(x): y' > ../w/a.go",
     "git add -- internal/a.go",
   ]);
-  expectAll("orchestrator", "bash", "ask", ["~/.config/opencode/bin/specs-commit p 'docs(x): y' > ../w/a.go"]);
   for (const a of ["architect", "harness-builder"]) {
     expectAll(a, "bash", "allow", ["~/.config/opencode/bin/specs-commit p 'docs(x): add adr'"]);
   }
@@ -153,8 +157,20 @@ test("edits stay in the specs tree outside the work repository", () => {
 });
 
 test("architect runs proofs of concept in Go, Python, Node, Rust and Zig", () => {
-  expectAll("architect", "bash", "allow", ["go run ./poc", "python3 bench.py", "node bench.mjs", "cargo run --release", "cargo bench", "rustc main.rs", "zig build run", "zig run main.zig"]);
-  expectAll("architect", "bash", "ask", ["cargo run > out.txt"]);
+  expectAll("architect", "bash", "allow", [
+    "go run ./poc",
+    "python3 bench.py",
+    "node bench.mjs",
+    "cargo run --release",
+    "cargo bench",
+    "rustc main.rs",
+    "zig build run",
+    "zig run main.zig",
+    "git worktree add poc/x main",
+    "git worktree remove poc/x",
+    "docker compose up -d",
+    "cargo run > out.txt",
+  ]);
 });
 
 test("default model and memory server do not depend on the shell environment", () => {

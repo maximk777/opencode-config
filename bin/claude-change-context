@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+# Claude Code SessionStart hook after compaction: prints the state of active changes of the current project.
+# Claude Code has no phase_reset tool, so this plays the part of the OpenCode session-reset plugin.
+import importlib.machinery
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+BIN = Path(__file__).resolve().parent
+CS = importlib.machinery.SourceFileLoader("change_state", str(BIN / "change-state")).load_module()
+
+
+def project_for(cwd, specs):
+    cwd = Path(cwd).resolve()
+    if specs.resolve() in cwd.parents:
+        return cwd.relative_to(specs.resolve()).parts[0]
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=cwd, capture_output=True, text=True)
+    return Path(top.stdout.strip()).name if top.returncode == 0 else None
+
+
+def render(project, state):
+    lines = [f"Change {project}/{state['slug']}: {len(state['tasks_done'])}/{state['tasks_total']} tasks done"]
+    for key in ("awaiting_review", "needs_fix", "ready_to_accept"):
+        if state[key]:
+            lines.append(f"- {key}: {', '.join(state[key])}")
+    if state["current_wave"] is not None:
+        lines.append(f"- current wave: {state['current_wave']}")
+    return "\n".join(lines)
+
+
+def context(cwd, specs, run_openspec=False):
+    project = project_for(cwd, specs)
+    changes = specs / project / "openspec" / "changes" if project else None
+    if not changes or not changes.is_dir():
+        return ""
+    blocks = [render(project, CS.read_state(specs / project, d.name, run_openspec))
+              for d in sorted(changes.iterdir()) if d.is_dir() and d.name != "archive"]
+    if not blocks:
+        return ""
+    return "\n\n".join(["Context was compacted. State of active changes, read from files:"] + blocks +
+                       [f"Continue from ~/specs/{project}; run ~/.config/opencode/bin/change-state ~/specs/{project} <slug> if anything is unclear."])
+
+
+if __name__ == "__main__":
+    try:
+        cwd = json.load(sys.stdin).get("cwd") or os.getcwd()
+    except Exception:
+        cwd = os.getcwd()
+    print(context(cwd, Path(os.environ.get("SPECS_ROOT") or Path.home() / "specs")))

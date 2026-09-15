@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isScopedAgent, renderState, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, openspecSummary } from "../lib/session-reset-core.mjs";
+import { isScopedAgent, renderState, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, openspecSummary, COMPACT_SHARE, sumTokens, compactionDecision } from "../lib/session-reset-core.mjs";
 
 const state = { slug: "add-ping", tasks_open: ["1.2", "1.3"], awaiting_review: ["1.2"], current_wave: 2 };
 
@@ -68,6 +68,19 @@ test("tier file becomes provider and model ids", () => {
   assert.deepEqual(modelFromTier("openrouter/vendor/model"), { providerID: "openrouter", modelID: "vendor/model" });
   assert.equal(modelFromTier(""), null);
   assert.equal(modelFromTier("no-slash"), null);
+});
+
+test("sumTokens adds all token fields and tolerates missing data", () => {
+  assert.equal(COMPACT_SHARE, 0.6);
+  assert.equal(sumTokens({ input: 100, output: 10, reasoning: 5, cache: { read: 50, write: 20 } }), 185);
+  assert.equal(sumTokens(null), 0);
+  assert.equal(sumTokens({ input: 100, output: 10 }), 110);
+});
+
+test("compactionDecision gates at 60% of the context window", () => {
+  assert.deepEqual(compactionDecision(400000, 1000000), { compact: false, message: "phase_reset skipped: 400000 tokens below 60% of 1000000" });
+  assert.deepEqual(compactionDecision(600000, 1000000), { compact: true });
+  assert.deepEqual(compactionDecision(700000, 1000000), { compact: true });
 });
 
 test("phase_reset summarizes with the fast tier model", async () => {

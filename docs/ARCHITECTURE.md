@@ -440,11 +440,21 @@ Tier-файлы — единственное место назначения м�
 - **Проектные агенты и скиллы (S5).** Работают через закоммиченные симлинки `.opencode/agents` и `.opencode/skills`; скиллы также находятся нативно в `.agents/skills`. Временные папки в `/var` ломают поиск проекта (`/private/var`), тестировать только под `$HOME`.
 - **OpenViking.**
   - Эмбеддинги Ollama подключаются как OpenAI-совместимый провайдер: `"provider": "openai", "api_base": "http://host.docker.internal:11434/v1"`. Провайдер `ollama` бьёт в `/embeddings` и получает 404.
-  - Корневой ключ не читает и не пишет данные. Создан аккаунт `maxim` (`ov admin create-account maxim --admin maxim --sudo`), пользовательский ключ лежит в `~/.openviking/.env` как `OPENVIKING_API_KEY`; его же использует MCP в `opencode.json`.
+  - Корневой ключ не читает и не пишет данные. Создан аккаунт `maxim` (`ov admin create-account maxim --admin maxim --sudo`), пользовательский ключ лежит в `~/.openviking/.env` как `OPENVIKING_API_KEY`. MCP в `opencode.json` читает его из `~/.openviking/mcp-key` (600, пишет `bin/ov-up`) через `{file:}` и с `"oauth": false`: переменная из `.zshrc` не видна OpenCode, запущенному не из интерактивного shell, пустой Bearer давал 401 и уведомление «нужно залогиниться».
+  - Посмотреть память: `bin/ov-studio` поднимает Studio на `http://127.0.0.1:1934/studio` и подставляет пользовательский ключ на своей стороне, в браузер ключ не попадает; запросы с чужим `Origin` отклоняются. Главная страница Studio показывает нули: статистика требует ключ админа. Данные — в Playground, дерево `viking://`.
+  - Плагин сброса писал сводки в `viking://user/memories/sessions` с `mode: upsert`, сервер отвечал `INVALID_URI` и `unsupported write mode`, ошибка глоталась. Теперь URI `viking://user/<user>/memories/sessions/<id>.md` (пользователь из `/api/v1/system/status`), режим `replace`, ключ из `~/.openviking/mcp-key`, сбой пишется в лог.
   - `ov` CLI в контейнере требует `ov language en` и конфиг `ov config add custom --name user --url http://127.0.0.1:1933 --api-key-stdin --activate`.
   - Повторный `ov add-resource ... --to <тот же uri>` переиндексирует без ошибок: на этом факте держится синхронизация `ov-syncd`, которая запускает эту команду один раз за проект, когда он становится due, а не на каждом 15-секундном тике; `bin/ov-sync` только кладёт маркер в очередь.
 - **Serena** удалена из живого конфига по просьбе.
 - **Проверка модели агента:** `bin/oc-agent <agent>`.
+- **Claude Code.** `bin/claude-link` подключает сетап в `~/.claude`, повторный запуск безопасен и чужие файлы не трогает:
+  - `CLAUDE.md` → `AGENTS.md`, скиллы и команды симлинками; поле `agent:` в командах Claude Code игнорирует, поэтому `/change` запускать внутри `claude --agent orchestrator`;
+  - агенты генерируются из `opencode.json` и `prompts/` с меткой, модели: smart → opus, fast → sonnet; у explorer и task-reviewer узкий список tools;
+  - `settings.json`: плагины magent, magent-lang, humanizer выключены; хук `SessionStart` (matcher `compact`) запускает `bin/claude-change-context` вместо `phase_reset`; deny на `.env`, `printenv`, `env`, `opencode debug config`;
+  - MCP OpenViking в user scope с `headersHelper` = `bin/ov-mcp-headers`, ключ не хранится в `~/.claude.json`;
+  - права OpenCode в Claude не переносятся: там свой синтаксис и первый совпавший deny.
+- **Модель по умолчанию.** `model` и `small_model` = `{file:./tiers/fast}`. Без них OpenCode брал последнюю модель из `~/.local/state/opencode/model.json` (там был Gemini Flash), а заголовки сессий генерировал чужой провайдер. `bin/oc-agent build` показывает `None`, потому что у build нет своей модели; фактическую модель видно в логе (`llm.model=`).
+- **PoC архитектора.** Кроме Go, Python и Node разрешены `cargo`, `rustc`, `rustup show` и `zig`; вывод в файл по-прежнему спрашивает.
 
 ## Workspace builder
 

@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+# headersHelper for the OpenViking MCP server in Claude Code: the key stays in its file, not in ~/.claude.json.
+import json
+import sys
+from pathlib import Path
+
+KEY_FILE = Path.home() / ".openviking" / "mcp-key"
+
+if __name__ == "__main__":
+    if not KEY_FILE.exists():
+        sys.exit(f"ov-mcp-headers: {KEY_FILE} is missing; run ~/.config/opencode/bin/ov-up")
+    print(json.dumps({"Authorization": f"Bearer {KEY_FILE.read_text().strip()}"}))
