@@ -185,3 +185,10 @@ test("reviewer and explorer run no writing commands", () => {
   expectAll("task-reviewer", "bash", "deny", ["go test ./... > out", "git diff --output=x", "rm a"]);
   expectAll("explorer", "bash", "deny", ["rg --pre rm x", "git log > x"]);
 });
+
+test("web-researcher runs no commands and edits nothing", () => {
+  expectAll("web-researcher", "bash", "deny", ["ls", "env", "printenv", "curl https://example.com", "git log --oneline -5"]);
+  expectAll("web-researcher", "edit", "deny", ["research/notes.md", "internal/a.go"]);
+  expectAll("web-researcher", "webfetch", "allow", ["*"]);
+  expectAll("web-researcher", "websearch", "allow", ["*"]);
+});

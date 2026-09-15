@@ -109,6 +109,22 @@
         "openviking_search": "allow"
       }
     },
+    "web-researcher": {
+      "mode": "subagent",
+      "description": "Read-only web research: searches the live web, fetches sources, cross-checks, returns cited findings",
+      "model": "{file:./tiers/fast}",
+      "prompt": "{file:./prompts/web-researcher.md}",
+      "steps": 40,
+      "permission": {
+        "edit": "deny",
+        "task": "deny",
+        "bash": {
+          "*": "deny"
+        },
+        "webfetch": "allow",
+        "websearch": "allow"
+      }
+    },
     "orchestrator": {
       "mode": "primary",
       "description": "Runs one change from brainstorm to archive",
@@ -124,7 +140,8 @@
           "executor": "allow",
           "executor-strong": "allow",
           "task-reviewer": "allow",
-          "explorer": "allow"
+          "explorer": "allow",
+          "web-researcher": "allow"
         },
         "bash": {
           "*": "allow",
@@ -245,7 +262,8 @@
         },
         "task": {
           "*": "deny",
-          "explorer": "allow"
+          "explorer": "allow",
+          "web-researcher": "allow"
         },
         "bash": {
           "*": "allow",

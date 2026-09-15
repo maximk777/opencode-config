@@ -36,8 +36,21 @@ test("executors cannot commit and the orchestrator commits only on approval", ()
 test("orchestrator edits only specs and dispatches only the flow subagents", () => {
   assert.deepEqual(A.orchestrator.permission.edit, { "*": "deny", "../*specs/*": "allow" });
   assert.deepEqual(A.orchestrator.permission.task, {
-    "*": "deny", executor: "allow", "executor-strong": "allow", "task-reviewer": "allow", explorer: "allow",
+    "*": "deny", executor: "allow", "executor-strong": "allow", "task-reviewer": "allow", explorer: "allow", "web-researcher": "allow",
   });
+});
+
+test("web-researcher is a visible fast subagent with web tools only", () => {
+  assert.equal(A["web-researcher"].mode, "subagent");
+  assert.notEqual(A["web-researcher"].hidden, true);
+  assert.equal(A["web-researcher"].model, "{file:./tiers/fast}");
+  assert.equal(A["web-researcher"].steps, 40);
+  assert.equal(A["web-researcher"].permission.edit, "deny");
+  assert.equal(A["web-researcher"].permission.task, "deny");
+  assert.deepEqual(A["web-researcher"].permission.bash, { "*": "deny" });
+  assert.equal(A["web-researcher"].permission.webfetch, "allow");
+  assert.equal(A["web-researcher"].permission.websearch, "allow");
+  assert.ok(prompt("web-researcher").includes("Cross-check every key claim across at least two independent sources"));
 });
 
 test("reviewer has no memory tools and cannot edit code", () => {
