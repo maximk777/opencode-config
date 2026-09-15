@@ -405,6 +405,7 @@
       "oauth": false
     }
   },
+  "lsp": true,
   "plugin": [
     "./plugins/session-reset.mjs"
   ]
