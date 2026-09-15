@@ -1,0 +1,312 @@
+#!/usr/bin/env python3
+"""Per-day OpenViking cost against agent reads, for the memory experiment and setup-improver."""
+from __future__ import annotations
+
+import json
+import os
+import re
+import sqlite3
+import subprocess
+import sys
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+MEMORY_RE = re.compile(r'^Memory: query="(?P<query>[^"]*)" hits=(?P<hits>\d+) used=(?P<used>yes|no) rederived=(?P<rederived>\S+)$')
+REDERIVED_RE = re.compile(r'^Rederived: (?P<path>\S+)$')
+COLUMNS = ["date", "vlm", "reindex", "embed", "imports", "reads_claude", "reads_opencode", "memory", "used", "rederived"]
+SNAPSHOT_FIELDS = ("vlm_calls", "embedding_calls", "add_resource_tasks")
+READ_TOOLS = {"search", "find", "read", "grep", "glob", "list", "tree", "overview", "abstract"}
+CLAUDE_TOOL_PREFIX = "mcp__openviking__"
+OPENCODE_TOOL_PREFIX = "openviking_"
+
+
+def _is_int(value):
+    # bool is a subclass of int in Python but never a valid counter value here
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def day_list(today, n):
+    return [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(n - 1, -1, -1)]
+
+
+def load_usage(path):
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    lines = []
+    for raw in text.splitlines():
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            lines.append(json.loads(raw))
+        except json.JSONDecodeError:
+            continue
+    return lines
+
+
+def usage_by_day(lines, days):
+    days_set = set(days)
+    reindex_by_date = {}
+    snapshots = []
+    for line in lines:
+        if not isinstance(line, dict) or "date" not in line or not isinstance(line["date"], str):
+            continue
+        if "reindex_vlm" in line:
+            if _is_int(line["reindex_vlm"]):
+                reindex_by_date[line["date"]] = reindex_by_date.get(line["date"], 0) + line["reindex_vlm"]
+        elif line.get("unavailable"):
+            snapshots.append({"date": line["date"], "unavailable": True})
+        elif all(k in line and _is_int(line[k]) for k in SNAPSHOT_FIELDS):
+            snapshots.append(line)
+        # else: a snapshot missing required counters is treated as absent, same as "unavailable" -
+        # it must not silently bridge a delta across the day it should have covered.
+        else:
+            snapshots.append({"date": line["date"], "unavailable": True})
+
+    result = {}
+    for cur, nxt in zip(snapshots, snapshots[1:]):
+        if cur.get("unavailable") or nxt.get("unavailable"):
+            continue
+        day = cur["date"]
+        if day not in days_set:
+            continue
+        dv = nxt["vlm_calls"] - cur["vlm_calls"]
+        de = nxt["embedding_calls"] - cur["embedding_calls"]
+        di = nxt["add_resource_tasks"] - cur["add_resource_tasks"]
+        if dv < 0 or de < 0 or di < 0:
+            continue  # counter went backwards, e.g. a server restart
+        # reindex_vlm is a subset of the snapshot delta (reindexing is observed by the same
+        # counter), so it is reported alongside vlm, never added on top of it.
+        result[day] = {"vlm": dv, "reindex": reindex_by_date.get(day, 0), "embed": de, "imports": di}
+    return result
+
+
+def list_specs_projects(specs):
+    specs = Path(specs)
+    if not specs.is_dir():
+        return []
+    projects = []
+    for entry in sorted(specs.iterdir()):
+        if entry.name.startswith("."):
+            continue
+        if entry.is_symlink():
+            continue
+        if not entry.is_dir():
+            continue
+        if not (entry / ".git").exists():
+            continue
+        projects.append(entry)
+    return projects
+
+
+def memory_by_day(specs, run, since):
+    """Count added Memory and Rederived lines per commit day from `git log --since=<since> --format=commit %ct -p --no-color --unified=0`."""
+    if not Path(specs).is_dir():
+        return None
+    projects = list_specs_projects(specs)
+    result = {}
+    for project in projects:
+        try:
+            r = run(
+                # a bare date lets git's approxidate use the current time of day as the cutoff,
+                # which can drop early commits on the first day of the window; pin local midnight.
+                ["git", "log", f"--since={since} 00:00:00", "--format=commit %ct", "-p", "--no-color", "--unified=0"],
+                cwd=str(project), capture_output=True, text=True, timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if r.returncode != 0:
+            continue
+        current_date = None
+        for raw in r.stdout.splitlines():
+            if raw.startswith("commit "):
+                try:
+                    current_date = datetime.fromtimestamp(int(raw[len("commit "):].strip())).strftime("%Y-%m-%d")
+                except ValueError:
+                    current_date = None
+                continue
+            if current_date is None or not raw.startswith("+") or raw.startswith("+++"):
+                continue
+            text_line = raw[1:]
+            m = MEMORY_RE.match(text_line)
+            if m:
+                day = result.setdefault(current_date, {"memory": 0, "used": 0, "rederived": 0})
+                day["memory"] += 1
+                if m.group("used") == "yes":
+                    day["used"] += 1
+                if m.group("rederived") != "none":
+                    day["rederived"] += 1  # older logs put the rederived path on the Memory line itself
+                continue
+            if REDERIVED_RE.match(text_line):
+                day = result.setdefault(current_date, {"memory": 0, "used": 0, "rederived": 0})
+                day["rederived"] += 1
+    return result
+
+
+def _local_day_from_iso(timestamp):
+    # transcript timestamps are UTC with a trailing "Z"; fromisoformat (3.9) needs an explicit offset
+    if not isinstance(timestamp, str):
+        return None
+    text = timestamp[:-1] + "+00:00" if timestamp.endswith("Z") else timestamp
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone()
+    return dt.strftime("%Y-%m-%d")
+
+
+def _local_day_from_epoch_ms(value):
+    try:
+        ms = float(value)
+    except (TypeError, ValueError):
+        return None
+    try:
+        return datetime.fromtimestamp(ms / 1000).strftime("%Y-%m-%d")
+    except (OverflowError, OSError, ValueError):
+        return None  # out-of-range timestamp (e.g. a corrupt column value)
+
+
+def reads_claude(projects_dir, days):
+    """Count mcp__openviking__<read tool> tool_use blocks per local day; None when the directory is missing."""
+    projects_dir = Path(projects_dir)
+    if not projects_dir.is_dir():
+        return None
+    days_set = set(days)
+    counts = dict.fromkeys(days, 0)
+    for jsonl_path in sorted(projects_dir.glob("*/*.jsonl")):
+        try:
+            raw_bytes = jsonl_path.read_bytes()
+        except OSError:
+            continue
+        # decode per line with errors="replace" so one bad byte in one line (which then fails
+        # its own JSON parse below) does not take out every other line in the file
+        for raw_line in raw_bytes.splitlines():
+            raw = raw_line.decode("utf-8", errors="replace").strip()
+            if not raw:
+                continue
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            message = obj.get("message")
+            content = message.get("content") if isinstance(message, dict) else None
+            if not isinstance(content, list):
+                continue
+            reads = 0
+            for item in content:
+                if not isinstance(item, dict) or item.get("type") != "tool_use":
+                    continue
+                name = item.get("name")
+                if not isinstance(name, str) or not name.startswith(CLAUDE_TOOL_PREFIX):
+                    continue
+                if name[len(CLAUDE_TOOL_PREFIX):] in READ_TOOLS:
+                    reads += 1
+            if reads == 0:
+                continue
+            day = _local_day_from_iso(obj.get("timestamp"))
+            if day not in days_set:
+                continue
+            counts[day] += reads
+    return counts
+
+
+def reads_opencode(db_path, days):
+    """Count openviking_<read tool> tool parts per local day from a read-only SQLite connection; None when unreadable."""
+    db_path = Path(db_path)
+    if not db_path.exists():
+        return None
+    days_set = set(days)
+    counts = dict.fromkeys(days, 0)
+    try:
+        # as_uri() percent-encodes spaces and reserved characters (?, #) in the path
+        uri = db_path.resolve().as_uri() + "?mode=ro"
+        conn = sqlite3.connect(uri, uri=True)
+    except (sqlite3.Error, OSError, ValueError):
+        return None
+    try:
+        rows = conn.execute(
+            "select json_extract(data,'$.tool'), time_created from part "
+            "where json_extract(data,'$.type')='tool'"
+        ).fetchall()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    for tool, time_created in rows:
+        if not isinstance(tool, str) or not tool.startswith(OPENCODE_TOOL_PREFIX):
+            continue
+        if tool[len(OPENCODE_TOOL_PREFIX):] not in READ_TOOLS:
+            continue
+        day = _local_day_from_epoch_ms(time_created)
+        if day not in days_set:
+            continue
+        counts[day] += 1
+    return counts
+
+
+def render(days, usage, memory, claude, opencode):
+    rows = ["  ".join(COLUMNS)]
+    for day in days:
+        u = None if usage is None else usage.get(day)
+        m = None if memory is None else memory.get(day, {"memory": 0, "used": 0, "rederived": 0})
+        c = None if claude is None else claude.get(day)
+        o = None if opencode is None else opencode.get(day)
+        row = [
+            day,
+            str(u["vlm"]) if u is not None else "n/a",
+            str(u["reindex"]) if u is not None else "n/a",
+            str(u["embed"]) if u is not None else "n/a",
+            str(u["imports"]) if u is not None else "n/a",
+            str(c) if c is not None else "n/a",
+            str(o) if o is not None else "n/a",
+            str(m["memory"]) if m is not None else "n/a",
+            str(m["used"]) if m is not None else "n/a",
+            str(m["rederived"]) if m is not None else "n/a",
+        ]
+        rows.append("  ".join(row))
+    print("\n".join(rows))
+
+
+def parse_days(argv):
+    if len(argv) == 0:
+        return 7
+    if len(argv) == 2 and argv[0] == "--days":
+        try:
+            n = int(argv[1])
+        except ValueError:
+            return None
+        return n if n >= 1 else None
+    return None
+
+
+def main(argv, home=None, specs=None, today=None, run=subprocess.run):
+    n = parse_days(argv)
+    if n is None:
+        print("usage: ov-usage [--days N]", file=sys.stderr)
+        return 2
+    home = Path(home) if home is not None else Path.home()
+    specs = Path(specs) if specs is not None else Path(os.environ.get("SPECS_ROOT") or (home / "specs"))
+    today = today or date.today()
+
+    days = day_list(today, n)
+
+    usage_lines = load_usage(home / ".openviking" / "usage.jsonl")
+    usage = usage_by_day(usage_lines, days) if usage_lines is not None else None
+
+    memory = memory_by_day(specs, run, days[0])
+
+    claude = reads_claude(home / ".claude" / "projects", days)
+    opencode = reads_opencode(home / ".local" / "share" / "opencode" / "opencode.db", days)
+
+    render(days, usage, memory, claude, opencode)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
