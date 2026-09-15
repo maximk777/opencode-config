@@ -130,15 +130,15 @@ Filled example:
 | Source | Action | Target | Status | Note |
 |---|---|---|---|---|
 | kit workspace 0.3.0 | adopt | .agents/kit.json | todo | workspace_name=legacy-backoffice, forge=gitlab, language=ru |
-| README.md, legacy-app-legacy-transfer/README.md | merge | AGENTS.md | todo | project description and folder rows under the kit sections |
+| README.md, legacy-app/README.md | merge | AGENTS.md | todo | project description and folder rows under the kit sections |
 | README.md | merge | README.md | todo | purpose, contacts and links for people |
 | REPOSITORIES.md | merge | REPOSITORIES.md | todo | hand-written text only; the table rows go to repos.json |
-| legacy-app-legacy-transfer/ARCHITECTURE.md | merge | docs/ARCHITECTURE.md | todo | kit sections filled from the source |
+| legacy-app/ARCHITECTURE.md | merge | docs/ARCHITECTURE.md | todo | kit sections filled from the source |
 | REPOSITORIES.md, tools/clone-repos.sh | convert | repos.json | todo | 29 repositories in both lists; roles: Бэкенд → backend, Фронтенд → frontend, Аналитика → analyst |
-| legacy-app-legacy-transfer/design/tracker-proxy.md | adr | docs/adr/0002-tracker-proxy.md | todo | accepted: «Статус: **утверждён** 2026-09-02» |
-| legacy-app-legacy-transfer/design/export-notes.md | move | docs/design/export-notes.md | todo | no status line |
-| legacy-app-legacy-transfer/design/_TEMPLATE.md | remove | - | todo | template, not an ADR; links point to .agents/templates/adr.md |
-| legacy-app-legacy-transfer/diagrams/operations-flow.md | move | docs/diagrams/operations-flow.md | todo | key diagram:operations-flow |
+| legacy-app/design/tracker-proxy.md | adr | docs/adr/0002-tracker-proxy.md | todo | accepted: «Статус: **утверждён** 2026-09-02» |
+| legacy-app/design/export-notes.md | move | docs/design/export-notes.md | todo | no status line |
+| legacy-app/design/_TEMPLATE.md | remove | - | todo | template, not an ADR; links point to .agents/templates/adr.md |
+| legacy-app/diagrams/operations-flow.md | move | docs/diagrams/operations-flow.md | todo | key diagram:operations-flow |
 | tools/tracker/mcp-server | move | tracker/mcp-server | todo | tracker tooling |
 | tools/vault/ | move | scripts/vault/ | todo | unchanged; variable names go to .agents/env.schema.json |
 
@@ -150,12 +150,12 @@ Filled example:
 
 | Source | Action | Target | Status | Note |
 |---|---|---|---|---|
-| legacy-app-legacy-transfer/operations/stories/03-operation-days/ | move | domains/operations/streams/legacy-ops-operations/stories/operation-days/ | todo | PoC story: stories/operation-days.md |
-| ~/specs/legacy-backoffice/architecture/poc/operations-map/stories/notices.md | convert | domains/operations/streams/legacy-ops-operations/stories/notices/story.md | todo | no legacy folder |
-| legacy-app-legacy-transfer/operations/stories/01-init/ | remove | - | todo | no PoC story (stories/init.md dropped in PoC d76f6bd); owner decision: remove; reason: «There is no `story:operations/init`: the MFE scaffold, host registration and menu are not planned as a story; `scaffold.json` stays as the input. Tracker story DEMO-101 is not used by this map.» (MAP.md line 62 at PoC commit 6994fef, section «No init story») |
+| legacy-app/operations/stories/03-operation-days/ | move | domains/operations/streams/migration/stories/operation-days/ | todo | PoC story: stories/operation-days.md |
+| ~/specs/legacy-backoffice/architecture/poc/operations-map/stories/notices.md | convert | domains/operations/streams/migration/stories/notices/story.md | todo | no legacy folder |
+| legacy-app/operations/stories/01-init/ | remove | - | todo | no PoC story (stories/init.md dropped in PoC d76f6bd); owner decision: remove; reason: «There is no `story:operations/init`: the MFE scaffold, host registration and menu are not planned as a story; `scaffold.json` stays as the input. Tracker story DEMO-101 is not used by this map.» (MAP.md line 62 at PoC commit 6994fef, section «No init story») |
 
 Открытая работа:
-- origin/feature/operations-stories, merge request !3: changes legacy-app-legacy-transfer/operations/stories/. normalize-operations waits for its merge or the owner's word.
+- origin/feature/operations-stories, merge request !3: changes legacy-app/operations/stories/. normalize-operations waits for its merge or the owner's word.
 
 ## Личное
 
@@ -172,7 +172,7 @@ Filled example:
 
 ## Открытые вопросы
 
-- legacy-app-legacy-transfer/design/cache-notes.md: status word «на паузе» has no mapping. Source: line 3.
+- legacy-app/design/cache-notes.md: status word «на паузе» has no mapping. Source: line 3.
 ```
 
 Never put a secret value, token or `.local/env` content into the plan.
@@ -193,11 +193,11 @@ Steps 1 to 3 are the first approval in a worktree. Step 5 is a re-approval. Choo
 
 ## Phase 2: base
 
-Run this phase in `<wt>` on `normalize-base`, and only when the plan says `Статус плана: утверждён`. When a step below adds a row or an open question, set the plan back to `Статус плана: черновик` by «Approval» step 4, and apply no further row until the owner approves again by «Approval» step 5. Apply the rows in plan order: «Основа» top to bottom, then «Личное» top to bottom. Phase 1 wrote them in the order of the steps below, and «Resume by plan status» uses the same order. Apply each row by the step for its action. Verify it by its check in «Resume by plan status», then set its status to `done`. Domain folders stay in place on this branch, for example `legacy-app-legacy-transfer/operations/`. Never move, convert or delete a file inside them. «Link repair» may only fix links in them that point to paths this phase moved or removed.
+Run this phase in `<wt>` on `normalize-base`, and only when the plan says `Статус плана: утверждён`. When a step below adds a row or an open question, set the plan back to `Статус плана: черновик` by «Approval» step 4, and apply no further row until the owner approves again by «Approval» step 5. Apply the rows in plan order: «Основа» top to bottom, then «Личное» top to bottom. Phase 1 wrote them in the order of the steps below, and «Resume by plan status» uses the same order. Apply each row by the step for its action. Verify it by its check in «Resume by plan status», then set its status to `done`. Domain folders stay in place on this branch, for example `legacy-app/operations/`. Never move, convert or delete a file inside them. «Link repair» may only fix links in them that point to paths this phase moved or removed.
 
 1. The `adopt` row: adopt the kit.
    - Parameters: `workspace_name`, `title`, `forge`, `id_pattern`, `tracker_url`, `language`. Take `language` from the `Язык workspace:` line of the approved plan. Take `forge` from the host of `cd <wt> && git remote get-url origin` by the rules of `skills/workspace-create/SKILL.md` (Collect, item 4). Check `id_pattern` against a real tracker id found in the workspace with the command from that list (item 6). Ask the owner, one question per message, for every value no source gives.
-   - Run, with each value in single quotes: `~/.config/opencode/bin/workspace-kit adopt <wt> --param workspace_name='legacy-backoffice' --param title='АРМ Backoffice' --param forge='gitlab' --param id_pattern='(DEMO|SPPP)-\d+' --param tracker_url='https://tracker.example/i/{id}' --param language='ru'`. adopt stores the parameters, `language` included, in `.agents/kit.json`.
+   - Run, with each value in single quotes: `~/.config/opencode/bin/workspace-kit adopt <wt> --param workspace_name='legacy-backoffice' --param title='Legacy backoffice' --param forge='gitlab' --param id_pattern='(DEMO|SPPP)-\d+' --param tracker_url='https://tracker.example/i/{id}' --param language='ru'`. adopt stores the parameters, `language` included, in `.agents/kit.json`.
    - On exit 2, show the owner the message, fix the value together and rerun. When `<wt>/.agents/kit.json` already exists, adopt ran in an earlier run and refuses to run again. Skip the command and take the conflicts from the row note.
    - When the note has no conflicts record (the run stopped between adopt and the record), rebuild the list. adopt found a conflict in two cases. Either a kit path existed on the default branch with different content, comparing templated files after parameter substitution. Or one of the path's parent paths was a file. This command repeats those rules against `origin/<default>`, with the parameters from `.agents/kit.json`, and prints the same sorted `conflict:` lines as adopt did:
      ```
@@ -245,10 +245,10 @@ Run this phase in `<wt>` on `normalize-base`, and only when the plan says `Ст�
    ```
 
 2. The `merge` rows: merge each templated file with the sources in its row. The kit version of `<path>` is `~/.config/opencode/kits/workspace/<path>` with `{{title}}` and `{{workspace_name}}` replaced by the adopt parameters. When `<path>` had no conflict, adopt already copied that version into `<wt>`. Merge only from the sources named in the row; another source is a deviation. Never copy a home path. Write a relative path or a key instead, or ask the owner. A source file of a `convert` row leaves git only when the plan has a `remove` row for it.
-   - `AGENTS.md`: keep every kit section, in the kit's order and wording: «Start here», «Folder map», «Personal layer», «Keys and links», «Skills», «Changes», «More». Under the title, add what the workspace is, taken from the entry documents (for example `README.md` and `legacy-app-legacy-transfer/README.md`). Add a «Folder map» row for each project folder the kit table lacks, for example `| legacy-app-legacy-transfer/ | domains not yet under the lifecycle | normalize-<domain> merge requests |`. When an existing instruction contradicts a kit rule, do not copy it; list it for the owner.
+   - `AGENTS.md`: keep every kit section, in the kit's order and wording: «Start here», «Folder map», «Personal layer», «Keys and links», «Skills», «Changes», «More». Under the title, add what the workspace is, taken from the entry documents (for example `README.md` and `legacy-app/README.md`). Add a «Folder map» row for each project folder the kit table lacks, for example `| legacy-app/ | domains not yet under the lifecycle | normalize-<domain> merge requests |`. When an existing instruction contradicts a kit rule, do not copy it; list it for the owner.
    - `README.md`: start from the kit version. Keep the project text meant for people from the existing file, such as purpose, contacts and useful links. Put it as extra sections after «Where things are» and before «Changing the workspace», so the kit sections «Changing the workspace» and «Optional tools» stay last.
    - `REPOSITORIES.md`: the text above `<!-- repos:begin -->` is the existing hand-written description: what each repository or group does and how they depend on each other. Between the markers keep only the kit header; step 9 fills in the rows. The rows of the old hand-kept table go into `repos.json` in step 3, not into the text.
-   - `docs/ARCHITECTURE.md`: keep the kit sections «Purpose», «Systems», «Domains», «Decisions», «Diagrams» and replace their placeholder lines with text from the source (for example `legacy-app-legacy-transfer/ARCHITECTURE.md`). A source section that fits none of them goes after «Diagrams» under its own heading. Link with a key only when its target exists on this branch; `domain:` keys do not resolve until the domain phases.
+   - `docs/ARCHITECTURE.md`: keep the kit sections «Purpose», «Systems», «Domains», «Decisions», «Diagrams» and replace their placeholder lines with text from the source (for example `legacy-app/ARCHITECTURE.md`). A source section that fits none of them goes after «Diagrams» under its own heading. Link with a key only when its target exists on this branch; `domain:` keys do not resolve until the domain phases.
    - `tracker/tracker.json`: keep the kit version with the parameters.
 
 3. The `convert` row for `repos.json`: write it from the repository lists named in the row, one entry per repository. Use the key order and JSON format of step 7 in `.agents/skills/repos-add/SKILL.md`.
@@ -287,7 +287,7 @@ Run this phase in `<wt>` on `normalize-base`, and only when the plan says `Ст�
    - Body: the heading `# ADR-NNNN: <title>`, then `## Context`, `## Decision`, `## Alternatives` and `## Consequences`, filled with the note's own paragraphs under the section they belong to. Keep the wording. Put rejected options into the `| Option | Why not |` table only when the note names them. Write `Нет в исходной заметке.` under a section the note has nothing for. Note text that fits no section stays after `## Consequences` under its original heading. The status line leaves the body; the frontmatter carries it.
    - Apply «Link repair» for the source path.
 
-   Example. The note `legacy-app-legacy-transfer/design/tracker-proxy.md` starts with `# Прокси трекера` and `Статус: **утверждён** 2026-09-02`, and its row says `docs/adr/0002-tracker-proxy.md`, approved by Иванов И. The ADR starts:
+   Example. The note `legacy-app/design/tracker-proxy.md` starts with `# Прокси трекера` and `Статус: **утверждён** 2026-09-02`, and its row says `docs/adr/0002-tracker-proxy.md`, approved by Иванов И. The ADR starts:
    ```
    ---
    key: adr:0002
@@ -301,8 +301,8 @@ Run this phase in `<wt>` on `normalize-base`, and only when the plan says `Ст�
    ```
 
 5. The `move` rows to `docs/design/` and the `remove` rows.
-   - Move: `git mv legacy-app-legacy-transfer/design/export-notes.md docs/design/export-notes.md`, with the target from the row. The content stays unchanged.
-   - Remove: `git rm -r legacy-app-legacy-transfer/design/_TEMPLATE.md`. Never remove a path that has no `remove` row.
+   - Move: `git mv legacy-app/design/export-notes.md docs/design/export-notes.md`, with the target from the row. The content stays unchanged.
+   - Remove: `git rm -r legacy-app/design/_TEMPLATE.md`. Never remove a path that has no `remove` row.
    - Apply «Link repair» for the source path. A link to a removed file points to the replacement named in the row note, for example `.agents/templates/adr.md`. When the note names none, leave the link unchanged and list it for the owner by «Findings in existing content».
 
 6. The diagram `move` rows: move the diagrams to `docs/diagrams/`.
@@ -340,7 +340,7 @@ Run this phase in `<wt>` on `normalize-base`, and only when the plan says `Ст�
    - Run `cd <wt> && python3 tools/generate.py`, then `python3 tools/check.py; echo "exit $?"`. Each finding is a line `path:line rule-id message`.
    - Count the generated table rows: `python3 -c 'import re; t = open("REPOSITORIES.md").read(); b = t.split("<!-- repos:begin -->")[1].split("<!-- repos:end -->")[0]; print(len(re.findall(r"^\| ", b, re.M)) - 1)'`. It must print the entry count of step 3, for example `29`.
    - Fix the findings in content this phase wrote: the merged templated files, `repos.json`, `docs/adr/`, `docs/diagrams/external.json`, `.agents/env.schema.json`, new work records and repaired links. Run both commands again until no finding names that content. Example: `docs/adr/0002-tracker-proxy.md:1 adr accepted ADR lacks approved with by and date` is yours; step 4 says where the values come from.
-   - A finding in a file this phase moved without changing its content, or in any other existing file, is existing content, for example `legacy-app-legacy-transfer/clients/notes.md:14 home-path absolute home path; use a relative path or a key`. Follow «Findings in existing content» in `## Rules`.
+   - A finding in a file this phase moved without changing its content, or in any other existing file, is existing content, for example `legacy-app/clients/notes.md:14 home-path absolute home path; use a relative path or a key`. Follow «Findings in existing content» in `## Rules`.
    - The base is complete only when `python3 tools/check.py` prints nothing and `exit 0`. Mark the row `done`, then go to `## Hand-off`.
 
 ### Link repair
@@ -373,7 +373,7 @@ The path map is the plan: each `done` row of this phase that moved a path maps i
    ```
    After `git mv tools/clone-repos.sh scripts/clone-repos.sh` it prints `docs/setup.md:4:[x](../tools/clone-repos.sh)`, `docs/refs.md:7:[clone]: ../tools/clone-repos.sh` and `run.sh:1:sh "$ROOT/tools/clone-repos.sh"`, but not `README.md:2:See [clone](scripts/clone-repos.sh)`.
    Phase 3 step 11 adds `--folder` after the path, as in `' legacy --folder`. A literal mention then counts only when `<old>/` is followed by a path segment, so `docs/a.md:3:see legacy/demo/SITEMAP.md` is printed and the prose word in `docs/a.md:1:The legacy screens move.` is not. Link targets are matched as without the flag.
-2. Fix each hit by the path map. Write the new path relative to the linking file's current place: `python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))' docs/adr/0002-tracker-proxy.md legacy-app-legacy-transfer/operations/README.md` prints `../../docs/adr/0002-tracker-proxy.md`. Keep the link text; when the text is the old path, replace it with the key, as in `[adr:0002](../../docs/adr/0002-tracker-proxy.md)`. The search also prints a line that names a different path which only ends in `<old>`, such as `docs/other.md:1:see docs/tools/clone-repos.sh`. Leave that line unchanged, and list it with this reason for the hand-off report; step 9 accepts it only when it is listed.
+2. Fix each hit by the path map. Write the new path relative to the linking file's current place: `python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))' docs/adr/0002-tracker-proxy.md legacy-app/operations/README.md` prints `../../docs/adr/0002-tracker-proxy.md`. Keep the link text; when the text is the old path, replace it with the key, as in `[adr:0002](../../docs/adr/0002-tracker-proxy.md)`. The search also prints a line that names a different path which only ends in `<old>`, such as `docs/other.md:1:see docs/tools/clone-repos.sh`. Leave that line unchanged, and list it with this reason for the hand-off report; step 9 accepts it only when it is listed.
 3. When the row moved a Markdown file, recompute its own relative links for its new folder. Resolve each link from the file's previous folder. When the result, or a parent of it, is mapped by the path map, use the mapped path. Otherwise keep the resolved path. An ADR moved in step 4 that links to a diagram not yet moved keeps pointing at the diagram's old place; the diagram's row in step 6 then finds and fixes that link.
 4. A link whose target is on neither side of the path map, is absent from the worktree and never existed on the default branch (`git cat-file -e origin/<default>:<resolved path>` fails) stays unchanged; follow «Findings in existing content».
 
@@ -384,9 +384,9 @@ Run this phase in `<wt>` on `normalize-<domain>`, one domain per branch, and onl
 Placeholders used below:
 - `<language>`: `cd <wt> && python3 -c 'import json; print(json.load(open(".agents/kit.json"))["params"].get("language", "en"))'`, for example `ru`. The profile template `<name>` is `.agents/profiles/ui-migration/<name>.<language>.md` when `<language>` is not `en` and that file exists, otherwise `.agents/profiles/ui-migration/<name>.md`.
 - `<poc>`: the PoC folder named in the row sources, for example `~/specs/legacy-backoffice/architecture/poc/operations-map`.
-- `<stream>`: the stream name in the row targets, for example `legacy-ops-operations` from `EPIC-legacy-ops-operations.md`. The stream profile is always `ui-migration`.
-- `<old>`: the domain folder on the default branch, for example `legacy-app-legacy-transfer/operations`.
-- `<container>`: the old folder that holds the domain folders, for example `legacy-app-legacy-transfer`.
+- `<stream>`: the stream name in the row targets, for example `migration` from `EPIC-migration.md`. The stream profile is always `ui-migration`.
+- `<old>`: the domain folder on the default branch, for example `legacy-app/operations`.
+- `<container>`: the old folder that holds the domain folders, for example `legacy-app`.
 
 Every open question and every quoted source that this phase writes names a workspace file by its path after this branch's moves, not by its old path, for example `domains/demo/docs/SITEMAP.md:13` for a sitemap that step 8 moves from `legacy/demo/SITEMAP.md`. PoC files keep their `<poc>` path, since they never move.
 
@@ -401,16 +401,16 @@ Filled example for `operations`, language `ru`, with the map taken from the PoC:
 |---|---|---|---|---|
 | ~/specs/legacy-backoffice/architecture/poc/operations-map/map/ | convert | domains/operations/map/ | todo | all files copied (ls <poc>/map/*.md, 14 at PoC commit 6994fef); ## Transitions → ## Переходы, keys unchanged |
 | .agents/profiles/ui-migration/MAP.ru.md, ~/specs/legacy-backoffice/architecture/poc/operations-map/MAP.md | convert | domains/operations/MAP.md | todo | Legacy trace → Трасса legacy; Navigation → Навигация; Decisions → Решения; Open questions → Открытые вопросы |
-| legacy-app-legacy-transfer/operations/EPIC-legacy-ops-operations.md | convert | domains/operations/streams/legacy-ops-operations/epic.md | todo | Границы направления, Функциональность, Порядок переноса → Объём; Результат → Цель; Критерии успешности → Критерии успеха; Что не переносится → Вне объёма; Расхождения с версией аналитика → Открытые вопросы |
-| ~/specs/legacy-backoffice/architecture/poc/operations-map/MAP.md, legacy-app-legacy-transfer/operations/EPIC-legacy-ops-operations.md | convert | domains/operations/streams/legacy-ops-operations/stream.json | todo | map: «Map, navigation and mockups approved by the user on 2026-09-13» (MAP.md line 138 at PoC commit 6994fef), approver not named; goal: no source |
-| legacy-app-legacy-transfer/operations/stories/03-operation-days/ | move | domains/operations/streams/legacy-ops-operations/stories/operation-days/ | todo | PoC story: stories/operation-days.md; story.md text from the legacy folder, frontmatter from the PoC story |
-| ~/specs/legacy-backoffice/architecture/poc/operations-map/stories/notices.md | convert | domains/operations/streams/legacy-ops-operations/stories/notices/story.md | todo | no legacy folder; story.md from the PoC story |
-| legacy-app-legacy-transfer/operations/stories/01-init/ | remove | - | todo | no PoC story (stories/init.md dropped in PoC d76f6bd); owner decision: remove; reason: «There is no `story:operations/init`: the MFE scaffold, host registration and menu are not planned as a story; `scaffold.json` stays as the input. Tracker story DEMO-101 is not used by this map.» (MAP.md line 62 at PoC commit 6994fef, section «No init story») |
-| legacy-app-legacy-transfer/operations/stories/README.md | move | domains/operations/docs/stories-README.md | todo | hand-kept story index |
-| legacy-app-legacy-transfer/operations/BREAKDOWN.md | move | domains/operations/docs/BREAKDOWN.md | todo | hand-kept; the stream BREAKDOWN.md is generated |
-| legacy-app-legacy-transfer/operations/_api-inventory.md | move | domains/operations/docs/_api-inventory.md | todo | API inventory |
+| legacy-app/operations/EPIC-migration.md | convert | domains/operations/streams/migration/epic.md | todo | Границы направления, Функциональность, Порядок переноса → Объём; Результат → Цель; Критерии успешности → Критерии успеха; Что не переносится → Вне объёма; Расхождения с версией аналитика → Открытые вопросы |
+| ~/specs/legacy-backoffice/architecture/poc/operations-map/MAP.md, legacy-app/operations/EPIC-migration.md | convert | domains/operations/streams/migration/stream.json | todo | map: «Map, navigation and mockups approved by the user on 2026-09-13» (MAP.md line 138 at PoC commit 6994fef), approver not named; goal: no source |
+| legacy-app/operations/stories/03-operation-days/ | move | domains/operations/streams/migration/stories/operation-days/ | todo | PoC story: stories/operation-days.md; story.md text from the legacy folder, frontmatter from the PoC story |
+| ~/specs/legacy-backoffice/architecture/poc/operations-map/stories/notices.md | convert | domains/operations/streams/migration/stories/notices/story.md | todo | no legacy folder; story.md from the PoC story |
+| legacy-app/operations/stories/01-init/ | remove | - | todo | no PoC story (stories/init.md dropped in PoC d76f6bd); owner decision: remove; reason: «There is no `story:operations/init`: the MFE scaffold, host registration and menu are not planned as a story; `scaffold.json` stays as the input. Tracker story DEMO-101 is not used by this map.» (MAP.md line 62 at PoC commit 6994fef, section «No init story») |
+| legacy-app/operations/stories/README.md | move | domains/operations/docs/stories-README.md | todo | hand-kept story index |
+| legacy-app/operations/BREAKDOWN.md | move | domains/operations/docs/BREAKDOWN.md | todo | hand-kept; the stream BREAKDOWN.md is generated |
+| legacy-app/operations/_api-inventory.md | move | domains/operations/docs/_api-inventory.md | todo | API inventory |
 | ~/specs/legacy-backoffice/architecture/poc/operations-map/mockups.json | convert | docs/diagrams/external.json | todo | 18 mockup: keys with the canvas URL |
-| ~/specs/legacy-backoffice/architecture/poc/operations-map/mockups/MOCKUPS.md | import | domains/operations/streams/legacy-ops-operations/MOCKUPS.md | todo | mockups as text |
+| ~/specs/legacy-backoffice/architecture/poc/operations-map/mockups/MOCKUPS.md | import | domains/operations/streams/migration/MOCKUPS.md | todo | mockups as text |
 | ~/specs/legacy-backoffice/architecture/poc/operations-map/scaffold.json | import | domains/operations/scaffold.json | todo | project scaffold |
 | - | check | - | todo | check exits 0; map files = ls <poc>/map/*.md, story folders = ls <poc>/stories/*.md plus the kept legacy folders (14 and 14 at PoC commit 6994fef, none kept); --remaining goes to the owner report |
 ```
@@ -552,7 +552,7 @@ The example shows a mapped `move`, a `convert` and a `remove` story row; step 7 
              print("%s:%d:%s" % (src, n, line))
      ' origin/<default>:<old>/EPIC-<name>.md domains/<domain>/streams/<stream>/epic.md
      ```
-     For `operations` the last line reads `' origin/master:legacy-app-legacy-transfer/operations/EPIC-legacy-ops-operations.md domains/operations/streams/legacy-ops-operations/epic.md`. It may print only the status and approver lines that moved into `stream.json`. The `operations` epic has neither, so it prints nothing. That holds even for line 37 (at master 904a621), whose link target `_api-inventory.md` «Link repair» rewrote to `../../../../legacy-app-legacy-transfer/operations/_api-inventory.md`. Any other printed line is dropped text: put it back and run the check again.
+     For `operations` the last line reads `' origin/master:legacy-app/operations/EPIC-migration.md domains/operations/streams/migration/epic.md`. It may print only the status and approver lines that moved into `stream.json`. The `operations` epic has neither, so it prints nothing. That holds even for line 37 (at master 904a621), whose link target `_api-inventory.md` «Link repair» rewrote to `../../../../legacy-app/operations/_api-inventory.md`. Any other printed line is dropped text: put it back and run the check again.
 
    Example. `## Границы направления`, mapped to «Объём», lands as:
    ```
@@ -598,7 +598,7 @@ The example shows a mapped `move`, a `convert` and a `remove` story row; step 7 
    For `operations`, the PoC map approval names «the user» and the epic has no status line. Until the owner names the goal approver and date, and the map approver, the file has `"stage": "goal"` and `"approvals": []`.
 
 7. The story rows: one row at a time, then its frontmatter and sections. With PoC stories, the PoC `stories/` list is the target set, and Phase 1 inventory step 8 wrote one row per PoC story and one per legacy story folder. Which legacy folder goes with which PoC story comes only from the row Note that the owner approved with the plan; never match slugs, titles or text yourself.
-   - `move` row, a legacy folder mapped to a PoC story: run `cd <wt> && mkdir -p domains/<domain>/streams/<stream>/stories && git mv <old>/stories/<NN-folder> domains/<domain>/streams/<stream>/stories/<poc-slug>`, where `<poc-slug>` is the PoC file name from the Note without `.md`. For `operations`: `git mv legacy-app-legacy-transfer/operations/stories/03-operation-days domains/operations/streams/legacy-ops-operations/stories/operation-days`. `story.md`, `front.md` and `api.md` keep their names and the legacy text; only the frontmatter comes from the PoC story.
+   - `move` row, a legacy folder mapped to a PoC story: run `cd <wt> && mkdir -p domains/<domain>/streams/<stream>/stories && git mv <old>/stories/<NN-folder> domains/<domain>/streams/<stream>/stories/<poc-slug>`, where `<poc-slug>` is the PoC file name from the Note without `.md`. For `operations`: `git mv legacy-app/operations/stories/03-operation-days domains/operations/streams/migration/stories/operation-days`. `story.md`, `front.md` and `api.md` keep their names and the legacy text; only the frontmatter comes from the PoC story.
    - `convert` row, a PoC story without a legacy folder: run `cd <wt> && mkdir -p domains/<domain>/streams/<stream>/stories/<slug> && cp <poc>/stories/<slug>.md domains/<domain>/streams/<stream>/stories/<slug>/story.md`. The body stays as in the PoC; the frontmatter is reordered by the rule below. No `front.md` or `api.md` is created.
    - A legacy folder without a PoC story has one of two owner decisions in its Note, made before the domain phase; step 1 stops on anything else.
      - `move` row with `owner decision: keep`: run `cd <wt> && mkdir -p domains/<domain>/streams/<stream>/stories && git mv <old>/stories/<NN-folder> domains/<domain>/streams/<stream>/stories/<slug>`, where the slug is the folder name without its numeric prefix (`^[0-9]+-`). `story.md`, `front.md` and `api.md` keep their names and text; the frontmatter comes from the story text by the rule below. When the owner keeps `08-analytics`, the target is `stories/analytics`.
@@ -645,7 +645,7 @@ The example shows a mapped `move`, a `convert` and a `remove` story row; step 7 
    Родительский эпик: «Реализация ARM ABS Operations на базе платформы BackOffice».
    ```
 
-   Example, the end of `stories/notices/story.md` after the `convert` row: the PoC text ends with «Этапы», and the added heading follows it with an empty body. The owner report gets `domains/operations/streams/legacy-ops-operations/stories/notices/story.md: добавлен пустой раздел «Открытые вопросы»`:
+   Example, the end of `stories/notices/story.md` after the `convert` row: the PoC text ends with «Этапы», and the added heading follows it with an empty body. The owner report gets `domains/operations/streams/migration/stories/notices/story.md: добавлен пустой раздел «Открытые вопросы»`:
    ```
    ## Этапы
 
@@ -657,7 +657,7 @@ The example shows a mapped `move`, a `convert` and a `remove` story row; step 7 
 
 8. The `move` rows into `domains/<domain>/docs/`: hand-kept breakdown, API inventory and other domain documents.
    - Run `cd <wt> && mkdir -p domains/<domain>/docs && git mv <old>/BREAKDOWN.md domains/<domain>/docs/BREAKDOWN.md` and `git mv <old>/_api-inventory.md domains/<domain>/docs/_api-inventory.md`, with the targets from the rows. The content stays unchanged.
-   - Apply «Link repair» for each source path. A moved breakdown that links to `EPIC-legacy-ops-operations.md` then points to the stream's `epic.md`.
+   - Apply «Link repair» for each source path. A moved breakdown that links to `EPIC-migration.md` then points to the stream's `epic.md`.
    - `domains/<domain>/streams/<stream>/BREAKDOWN.md` is generated in step 12; never copy the hand-kept file there.
 
 9. The mockup rows: keys in `docs/diagrams/external.json`, text next to the stories.
@@ -684,14 +684,14 @@ The example shows a mapped `move`, a `convert` and a `remove` story row; step 7 
    - Run `cd <wt> && git rm -r <container>`, then apply «Link repair» for `<container>`, with `--folder` after the path in its old-path search. A container name is often a plain word, such as `legacy`, so only path-shaped mentions (`<container>/` followed by a path segment) and link targets count.
    - Remove the `<container>/` row that the base added to «Folder map» in `AGENTS.md`.
 
-   Example for `legacy-app-legacy-transfer`: `cd <wt> && git ls-files -- legacy-app-legacy-transfer/` prints `legacy-app-legacy-transfer/README.md`, `legacy-app-legacy-transfer/ARCHITECTURE.md` and `legacy-app-legacy-transfer/EPIC-backoffice-platform-migration.md`, and the row note reads `README.md, ARCHITECTURE.md: merged in the base; EPIC-backoffice-platform-migration.md: owner decision`. Then `git rm -r legacy-app-legacy-transfer`, «Link repair» for `legacy-app-legacy-transfer`, and the Folder map row `| legacy-app-legacy-transfer/ | ... |` leaves `AGENTS.md`.
+   Example for `legacy-app`: `cd <wt> && git ls-files -- legacy-app/` prints `legacy-app/README.md`, `legacy-app/ARCHITECTURE.md` and `legacy-app/EPIC-backoffice-platform-migration.md`, and the row note reads `README.md, ARCHITECTURE.md: merged in the base; EPIC-backoffice-platform-migration.md: owner decision`. Then `git rm -r legacy-app`, «Link repair» for `legacy-app`, and the Folder map row `| legacy-app/ | ... |` leaves `AGENTS.md`.
 
 12. The closing `check` row: generate, check and report the remaining work.
    - Run the old-path search of «Link repair» for the source path of every `done` row of this phase that moved or removed a path, with `--folder` for the container of step 11; the gate is the one of Phase 2 step 9.
    - Run `cd <wt> && python3 tools/generate.py`, then `python3 tools/check.py; echo "exit $?"`.
-   - Fix findings in content this phase wrote: `domains/<domain>/map/`, `MAP.md`, `epic.md`, `stream.json`, story frontmatter, `external.json` and repaired links. A finding that needs a missing fact is never fixed by guessing. Example: `domains/operations/streams/legacy-ops-operations/stories/bulk-operations/story.md:10 story repos key repo:arm-backoffice-statements does not resolve`. The repository is missing from `repos.json`; ask the owner to add it with repos-add in its own merge request, or to record an open question. A `missing section` finding on a story is yours: add the heading by step 7. Any other finding in story text, `front.md`, `api.md` or a moved document is existing content, for example a link in `front.md` to a file that never existed; follow «Findings in existing content».
+   - Fix findings in content this phase wrote: `domains/<domain>/map/`, `MAP.md`, `epic.md`, `stream.json`, story frontmatter, `external.json` and repaired links. A finding that needs a missing fact is never fixed by guessing. Example: `domains/operations/streams/migration/stories/bulk-operations/story.md:10 story repos key repo:arm-backoffice-statements does not resolve`. The repository is missing from `repos.json`; ask the owner to add it with repos-add in its own merge request, or to record an open question. A `missing section` finding on a story is yours: add the heading by step 7. Any other finding in story text, `front.md`, `api.md` or a moved document is existing content, for example a link in `front.md` to a file that never existed; follow «Findings in existing content».
    - Counts: `ls domains/<domain>/map/*.md | wc -l` equals `ls <poc>/map/*.md | wc -l`, or without a PoC the elements step 3 wrote. `ls -d domains/<domain>/streams/<stream>/stories/*/ | wc -l` equals `ls <poc>/stories/*.md | wc -l` plus the kept legacy folders, or without PoC stories the story rows. For `operations` at PoC commit 6994fef with no kept folder, every one of these commands prints `14`.
-   - The domain is complete only when `python3 tools/check.py` prints nothing and `exit 0`. Then run `python3 tools/check.py --remaining`. It exits 0 and prints the gate failures of the current stage, one per line, for example `stream:operations/legacy-ops-operations goal approval: domains/operations/streams/legacy-ops-operations/stream.json:1 no approval mark for stage goal with by and a YYYY-MM-DD date`. Put the full output into the owner report, mark the row `done`, and go to `## Hand-off`.
+   - The domain is complete only when `python3 tools/check.py` prints nothing and `exit 0`. Then run `python3 tools/check.py --remaining`. It exits 0 and prints the gate failures of the current stage, one per line, for example `stream:operations/migration goal approval: domains/operations/streams/migration/stream.json:1 no approval mark for stage goal with by and a YYYY-MM-DD date`. Put the full output into the owner report, mark the row `done`, and go to `## Hand-off`.
 
 ## Rules
 

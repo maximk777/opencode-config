@@ -114,8 +114,8 @@ class LifecycleBase(unittest.TestCase):
 class StreamShapeTest(LifecycleBase):
     def test_valid_stream_at_goal(self):
         self.write("domains/operations/map/documents.md", screen("documents"))
-        self.write("domains/operations/streams/legacy-ops-operations/epic.md", EPIC)
-        self.write_stream("goal", ["screen:operations/documents"], name="legacy-ops-operations")
+        self.write("domains/operations/streams/migration/epic.md", EPIC)
+        self.write_stream("goal", ["screen:operations/documents"], name="migration")
         self.assertEqual(self.findings(), [])
 
     def test_key_does_not_match_path(self):
