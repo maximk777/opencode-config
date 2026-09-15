@@ -398,7 +398,7 @@ Tier-файлы — единственное место назначения м�
 - глобальный `commit-msg` хук;
 - tier `deep` для архитектора;
 - Serena, Playwright, actionbook, context7, basic-memory, плагин superpowers;
-- трекер и статус, normalize и repo-kits для workspace builder: следующие изменения workspace-tracker-status и workspace-normalize.
+- обновление кита, repo-kits, трекер и статус для workspace builder: следующие изменения workspace-kit-update (обновление кита по штампу), workspace-repo-kits (repo-kits bff и mfe) и workspace-tracker-status (трекер и статус).
 
 ## 13. Отвергнутые варианты
 
@@ -464,7 +464,15 @@ CI в ядро не входит. Для работы без Python в скил�
 
 `tools/check.py` проверяет гейты всех закрытых стадий; отметка одобрения нужна только закрытым стадиям goal, map и decomposition, где в профиле есть гейт `approval`, а у ready, delivery и done такого гейта нет. Гейт текущей стадии показывает `python3 tools/check.py --remaining`, команда всегда завершается с кодом 0. Скиллы: `task-new` создаёт историю из шаблона профиля, `task-decompose` предлагает по истории на каждый экран scope без истории и заканчивается merge request с отметкой decomposition, `task-context` собирает контекст по ключу или id трекера через `.agents/index.json`. `extend` умеет виды `stream` и `map-element`.
 
-Следующие изменения: `workspace-tracker-status` (трекер, статус и часть гейта done про смёрдженные merge request), `workspace-normalize` (normalize и repo-kits).
+Нормализация. Режим `normalize` агента `workspace-builder` нужен для существующего репозитория без `.agents/kit.json` и загружает скилл `workspace-normalize`. Для репозитория со штампом `.agents/kit.json`, где в `docs/normalize/plan.md` остались строки `todo` под доменом, агент тоже выбирает `normalize` и выполняет его доменную фазу. Скилл работает только в git worktree от default-ветки и не трогает checkout владельца. Сначала он пишет план `docs/normalize/plan.md` (источник, действие, цель, статус), владелец его утверждает, и только потом что-то меняется. Затем идёт merge request основы (кит, `AGENTS.md`, `repos.json`, ADR, диаграммы) и по одному merge request на домен. Скилл ничего не выдумывает: спорная строка карты становится открытым вопросом со ссылкой на источник, а отметка одобрения без цитаты источника не пишется, и стадия не позже стадии без отметки. Коммитит владелец командами, которые печатает скилл.
+
+`bin/workspace-kit adopt` ставит кит в непустой git-репозиторий. Он копирует отсутствующие файлы, существующие файлы с другим содержимым не перезаписывает и печатает как конфликты, шаблонные файлы не трогает, пишет `.agents/kit.json` и отказывается, если штамп уже есть.
+
+Язык воркспейса задаёт параметр кита `language` в `.agents/kit.json` (по умолчанию `en`). Профиль при загрузке берёт значения на этом языке, языковые шаблоны `<name>.<language>.md` лежат рядом с английскими. У `ui-migration` есть русские значения и шаблоны (`story.ru.md`, `front.ru.md`, `api.ru.md`, «Переходы», «Трасса legacy»). Колонки и заголовок `BREAKDOWN.md` задаёт блок `breakdown` профиля, шаблоны `epic.md` и `MAP.md` лежат в папке профиля. Языки воркспейса появились в версии кита 0.3.0.
+
+Repo-kits. Кит репозитория лежит в workspace в `.agents/repo-kits/<kind>/`, а запись репозитория в `repos.json` выбирает его полем `kit` с `kind` и `params`. `tools/repo_kit.py` умеет `render` (отрисовать кит с параметрами), `status` (сравнить клон с китом и штампом) и `stamp` (записать штамп). Скилл `repo-kit-install` ставит кит в локальный клон, `repo-kit-update` обновляет его по штампу. Оба работают на ветке `repo-kit-<kind>-<version>` и до записи собирают решение по каждому изменённому в клоне файлу: `kit` пишет файл кита, `local` переносит текст клона в `.agents/local/` и пишет файл кита, `raise` останавливает прогон без изменений. Штамп `.agents/kit.json` в репозитории хранит sha256 каждого файла кита. Старую папку `.agent/` установка переносит в `.agents/` через `git mv`. Скиллы не коммитят, а печатают команды коммита, push и merge request. С repo-kits версия кита workspace 0.4.0.
+
+Следующие изменения: `workspace-kit-update` (обновление кита по штампу), `workspace-tracker-status` (трекер, статус и часть гейта done про смёрдженные merge request).
 
 ## 14. Источники
 
