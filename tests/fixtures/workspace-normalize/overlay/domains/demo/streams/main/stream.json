@@ -1,0 +1,21 @@
+{
+  "key": "stream:demo/main",
+  "profile": "ui-migration",
+  "stage": "decomposition",
+  "scope": [
+    "screen:demo/card",
+    "screen:demo/list"
+  ],
+  "approvals": [
+    {
+      "stage": "goal",
+      "by": "Сидорова А.",
+      "date": "2026-09-03"
+    },
+    {
+      "stage": "map",
+      "by": "Сидорова А.",
+      "date": "2026-09-04"
+    }
+  ]
+}

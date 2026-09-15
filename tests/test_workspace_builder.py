@@ -100,6 +100,37 @@ class WorkspaceBuilderAgent(unittest.TestCase):
         prompt = (REPO / "prompts" / "workspace-builder.md").read_text()
         self.assertIn("workspace-create", prompt)
         self.assertIn("workspace-extend", prompt)
+        self.assertIn("workspace-normalize", prompt)
+        self.assertIn("normalize", prompt)
+        self.assertIn(".agents/kit.json", prompt)
+
+    def test_prompt_routes_domain_phase_to_normalize(self):
+        prompt = (REPO / "prompts" / "workspace-builder.md").read_text()
+        routing = next((line for line in prompt.splitlines() if "domain phase" in line), "")
+        self.assertIn("docs/normalize/plan.md", routing)
+        self.assertIn(".agents/kit.json", routing)
+        self.assertIn("todo", routing)
+        self.assertIn("domain phase", routing)
+        self.assertIn("workspace-normalize", routing)
+
+    def test_prompt_create_mode_is_empty_directory_only(self):
+        prompt = (REPO / "prompts" / "workspace-builder.md").read_text()
+        routing = next((line for line in prompt.splitlines() if "workspace-create" in line), "")
+        self.assertIn("empty directory", routing)
+        self.assertNotIn("repository", routing)
+
+    def test_prompt_names_workspace_language_rule(self):
+        prompt = (REPO / "prompts" / "workspace-builder.md").read_text()
+        rule = next((line for line in prompt.splitlines() if "params.language" in line), "")
+        self.assertIn("unless the user asks otherwise", rule)
+        self.assertIn("<name>.md", rule)
+        self.assertIn("docs/normalize/plan.md", prompt)
+
+    def test_normalize_skill_exists(self):
+        skill = REPO / "skills" / "workspace-normalize" / "SKILL.md"
+        self.assertTrue(skill.exists(), f"{skill} is missing")
+        frontmatter = skill.read_text().split("---")[1]
+        self.assertIn("name: workspace-normalize", frontmatter)
 
     @unittest.skipUnless(CLAUDE_LINK.exists(), "bin/claude-link is not present in this checkout")
     def test_claude_link_plans_agent_with_prompt_body(self):
