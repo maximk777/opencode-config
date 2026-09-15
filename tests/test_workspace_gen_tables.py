@@ -12,7 +12,7 @@ import unittest
 from wslib import gen_tables
 
 REPOS_MD = "# Repos\n\nIntro\n<!-- repos:begin -->\nold\n<!-- repos:end -->\nTail\n"
-HEADER = "| Name | Forge | Default branch | Roles | Summary |\n|---|---|---|---|---|\n"
+HEADER = "| Name | Forge | Default branch | Roles | Kit | Summary |\n|---|---|---|---|---|---|\n"
 
 
 def write(root: Path, rel: str, text: str) -> None:
@@ -53,8 +53,28 @@ class RepositoryTable(Base):
         out = gen_tables.render(self.root)
         expected = (
             "# Repos\n\nIntro\n<!-- repos:begin -->\n" + HEADER
-            + "| b-repo | github | master |  | Second |\n"
-            + "| a-repo | gitlab | main | backend, qa | First |\n"
+            + "| b-repo | github | master |  |  | Second |\n"
+            + "| a-repo | gitlab | main | backend, qa |  | First |\n"
+            + "<!-- repos:end -->\nTail\n"
+        )
+        self.assertEqual(out["REPOSITORIES.md"], expected.encode("utf-8"))
+        write_out(self.root, out)
+        self.assertEqual(gen_tables.render(self.root), out)
+
+    def test_kit_column_holds_kit_kind(self):
+        write(self.root, "repos.json", dump({"repositories": [
+            {"name": "mfe-abs-operations", "remote": "git@x:mfe.git", "forge": "gitlab",
+             "default_branch": "main", "roles": ["frontend"], "summary": "Operations",
+             "kit": {"kind": "mfe", "params": {"APP_NAME": "abs-operations"}}},
+            {"name": "docs-site", "remote": "git@x:docs.git", "forge": "github",
+             "default_branch": "main", "roles": [], "summary": "Docs"},
+        ]}))
+        write(self.root, "REPOSITORIES.md", REPOS_MD)
+        out = gen_tables.render(self.root)
+        expected = (
+            "# Repos\n\nIntro\n<!-- repos:begin -->\n" + HEADER
+            + "| mfe-abs-operations | gitlab | main | frontend | mfe | Operations |\n"
+            + "| docs-site | github | main |  |  | Docs |\n"
             + "<!-- repos:end -->\nTail\n"
         )
         self.assertEqual(out["REPOSITORIES.md"], expected.encode("utf-8"))
@@ -80,6 +100,16 @@ class RepositoryTable(Base):
 
     def test_wrong_repos_shape_skips_table(self):
         write(self.root, "repos.json", dump({"repositories": ["b-repo"]}))
+        write(self.root, "REPOSITORIES.md", REPOS_MD)
+        self.assertNotIn("REPOSITORIES.md", gen_tables.render(self.root))
+
+    def test_kit_not_object_skips_table(self):
+        write(self.root, "repos.json", dump({"repositories": [{"name": "a", "kit": "mfe"}]}))
+        write(self.root, "REPOSITORIES.md", REPOS_MD)
+        self.assertNotIn("REPOSITORIES.md", gen_tables.render(self.root))
+
+    def test_kit_kind_not_string_skips_table(self):
+        write(self.root, "repos.json", dump({"repositories": [{"name": "a", "kit": {"kind": 5}}]}))
         write(self.root, "REPOSITORIES.md", REPOS_MD)
         self.assertNotIn("REPOSITORIES.md", gen_tables.render(self.root))
 

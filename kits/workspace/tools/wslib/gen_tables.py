@@ -13,7 +13,7 @@ BEGIN = "<!-- repos:begin -->"
 EXTERNAL_PREFIXES = ("diagram:", "mockup:")
 END = "<!-- repos:end -->"
 ADR_RE = re.compile(r"([0-9]{4})-[a-z0-9-]+\.md")
-TABLE_HEADER = ["| Name | Forge | Default branch | Roles | Summary |", "|---|---|---|---|---|"]
+TABLE_HEADER = ["| Name | Forge | Default branch | Roles | Kit | Summary |", "|---|---|---|---|---|---|"]
 
 
 def _read_text(path: Path) -> Optional[str]:
@@ -51,12 +51,17 @@ def _table_rows(manifest: object) -> Optional[List[str]]:
         cells = [entry.get(f, "") for f in ("name", "forge", "default_branch")]
         roles = entry.get("roles", [])
         summary = entry.get("summary", "")
-        if not isinstance(roles, list) or not all(isinstance(c, str) for c in cells + roles + [summary]):
+        kit = entry.get("kit", {})
+        if not isinstance(roles, list) or not isinstance(kit, dict):
+            return None
+        kind = kit.get("kind", "")
+        texts = cells + roles + [kind, summary]
+        if not all(isinstance(c, str) for c in texts):
             return None
         # Lone surrogates (valid JSON escapes, not UTF-8) make the manifest unusable instead of raising.
-        if not all(_encodable(c) for c in cells + roles + [summary]):
+        if not all(_encodable(c) for c in texts):
             return None
-        rows.append("| %s |" % " | ".join(cells + [", ".join(roles), summary]))
+        rows.append("| %s |" % " | ".join(cells + [", ".join(roles), kind, summary]))
     return rows
 
 
