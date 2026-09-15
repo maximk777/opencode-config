@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { tool } from "@opencode-ai/plugin";
-import { isScopedAgent, buildCompactionContext, summaryPayload, safeFacts, modelFromTier } from "../lib/session-reset-core.mjs";
+import { isScopedAgent, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, sumTokens, compactionDecision } from "../lib/session-reset-core.mjs";
 
 const TOKEN_BUDGET = 1500;
 const OV = "http://127.0.0.1:1933";
@@ -107,6 +107,15 @@ export const SessionReset = async ({ client, $ }) => {
         args: {},
         async execute(_args, ctx) {
           if (!isScopedAgent(ctx.agent)) return "phase_reset is only for orchestrator and architect sessions";
+          const msgs = await client.session.messages({ path: { id: ctx.sessionID } }).catch(() => null);
+          const last = [...(msgs?.data ?? [])].reverse().find((m) => m.role === "assistant");
+          const tokens = last ? sumTokens(last.tokens) : 0;
+          const providers = await client.config.providers().catch(() => null);
+          const limit = providers?.data?.providers?.find((p) => p.id === last?.providerID)?.models?.[last?.modelID]?.limit?.context;
+          if (last && Number.isFinite(limit) && limit > 0) {
+            const d = compactionDecision(tokens, limit);
+            if (!d.compact) return d.message;
+          }
           const tier = new URL("../tiers/fast", import.meta.url);
           const model = modelFromTier(await readFile(tier, "utf8").catch(() => ""));
           if (!model) return `phase_reset: ${tier.pathname} does not name a provider/model`;

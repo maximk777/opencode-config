@@ -88,10 +88,69 @@ test("phase_reset summarizes with the fast tier model", async () => {
   const { SessionReset } = await import("../plugins/session-reset.mjs");
   const tier = modelFromTier(readFileSync(new URL("../tiers/fast", import.meta.url), "utf8"));
   let body;
-  const client = { session: { summarize: async (req) => { body = req.body; } } };
+  const client = {
+    session: {
+      summarize: async (req) => { body = req.body; },
+      messages: async () => ({ data: [] }),
+    },
+    config: { providers: async () => ({ data: { providers: [] } }) },
+  };
   const hooks = await SessionReset({ client, $: null });
   await hooks.tool.phase_reset.execute({}, { agent: "orchestrator", sessionID: "s1" });
   assert.deepEqual(body, tier);
+});
+
+const shareClient = (input) => {
+  const calls = [];
+  const client = {
+    session: {
+      summarize: async (req) => calls.push(req.body),
+      messages: async () => ({
+        data: [{ role: "assistant", providerID: "zai-coding-plan", modelID: "glm-5.3", tokens: { input, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }],
+      }),
+    },
+    config: {
+      providers: async () => ({ data: { providers: [{ id: "zai-coding-plan", models: { "glm-5.3": { limit: { context: 1000000, output: 131072 } } } }] } }),
+    },
+  };
+  return { client, calls };
+};
+
+test("phase_reset skips summarize below the compaction share", async () => {
+  const { SessionReset } = await import("../plugins/session-reset.mjs");
+  const { client, calls } = shareClient(400000);
+  const hooks = await SessionReset({ client, $: null });
+  const out = await hooks.tool.phase_reset.execute({}, { agent: "orchestrator", sessionID: "s1" });
+  assert.equal(out, "phase_reset skipped: 400000 tokens below 60% of 1000000");
+  assert.deepEqual(calls, []);
+});
+
+test("phase_reset schedules summarize at the compaction share", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { SessionReset } = await import("../plugins/session-reset.mjs");
+  const tier = modelFromTier(readFileSync(new URL("../tiers/fast", import.meta.url), "utf8"));
+  const { client, calls } = shareClient(600000);
+  const hooks = await SessionReset({ client, $: null });
+  const out = await hooks.tool.phase_reset.execute({}, { agent: "orchestrator", sessionID: "s1" });
+  assert.match(out, /compaction scheduled/);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], tier);
+});
+
+test("unreadable tokens or limit fail safe to compaction", async () => {
+  const { SessionReset } = await import("../plugins/session-reset.mjs");
+  const calls = [];
+  const client = {
+    session: {
+      summarize: async (req) => calls.push(req.body),
+      messages: async () => ({ data: [] }),
+    },
+    config: { providers: () => Promise.reject(new Error("offline")) },
+  };
+  const hooks = await SessionReset({ client, $: null });
+  const out = await hooks.tool.phase_reset.execute({}, { agent: "orchestrator", sessionID: "s1" });
+  assert.match(out, /compaction scheduled/);
+  assert.equal(calls.length, 1);
 });
 
 test("change-state failure is logged as a warning without stderr", async () => {
