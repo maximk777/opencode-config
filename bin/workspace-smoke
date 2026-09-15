@@ -22,6 +22,22 @@ LIST_SCREEN = "screen:demo/list"
 CARD_SCREEN = "screen:demo/card"
 STORY_BRANCH = "story-demo-card"
 UNCOVERED_RE = re.compile(r"scope key (\S+) is in no story's scope")
+KIT_REPO = "demo-bff"
+KIT_SERVICE = "demo-bff"
+KIT_BRANCH = "repo-kit-demo-1.0.0"
+KIT_JSON = {
+    "name": "demo",
+    "version": "1.0.0",
+    "target": ".agents",
+    "params": {"SERVICE": {"description": "Service name of the repository", "pattern": "[a-z][a-z0-9-]*"}},
+}
+KIT_FILES = {
+    "AGENTS.md": "# __SERVICE__\n\nAgent instructions for __SERVICE__.\n",
+    "rules/go.md": "# Go rules for __SERVICE__\n\nRun gofmt before every commit.\n",
+    "agents/implementer.md": "# Implementer\n\nImplement one task of __SERVICE__ at a time.\n",
+}
+KIT_OLD_IMPLEMENTER = "# Implementer\n\nImplement tasks in demo-bff however you like.\n"
+KIT_SETUP_STATUS = "absent .agents/AGENTS.md\nedited .agents/agents/implementer.md\nsame .agents/rules/go.md"
 
 
 def run(cmd, cwd=None, env=None, check=True):
@@ -51,6 +67,9 @@ def fixtures(run_dir):
     bff.mkdir(parents=True)
     git(bff, "init", "-q", "-b", "main")
     (bff / "README.md").write_text("# demo-bff\n", encoding="utf-8")
+    # Legacy .agent/ on the default branch: one file differs from the kit, one equals the rendered kit file.
+    write(bff / ".agent/agents/implementer.md", KIT_OLD_IMPLEMENTER)
+    write(bff / ".agent/rules/go.md", KIT_FILES["rules/go.md"].replace("__SERVICE__", KIT_SERVICE))
     git(bff, "add", "-A")
     git(bff, "commit", "-q", "-m", "chore: init", commit=True)
     git(bff, "checkout", "-q", "-b", "TASK-1-demo")
@@ -110,7 +129,7 @@ def demo_stream(owner):
     domain = owner / "domains" / DEMO
     readme = (owner / ".agents/templates/domain/README.md").read_text(encoding="utf-8")
     write(domain / "README.md", readme.replace("<name>", DEMO))
-    map_doc = (owner / ".agents/templates/MAP.md").read_text(encoding="utf-8").replace("<domain>", DEMO)
+    map_doc = (owner / ".agents/profiles/ui-migration/MAP.md").read_text(encoding="utf-8").replace("<domain>", DEMO)
     header = "| Legacy group | Legacy item | Legacy route | Target |\n|---|---|---|---|\n"
     if header not in map_doc:
         print("workspace-smoke: MAP.md template has no Legacy trace table", file=sys.stderr)
@@ -181,8 +200,13 @@ def workspace(run_dir):
         "default_branch": "main",
         "roles": ["backend"],
         "summary": "Demo BFF",
+        "kit": {"kind": KIT_JSON["name"], "params": {"SERVICE": KIT_SERVICE}},
     })
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    kit_dir = owner / ".agents/repo-kits" / KIT_JSON["name"]
+    write(kit_dir / "kit.json", json.dumps(KIT_JSON, indent=2, ensure_ascii=False) + "\n")
+    for rel, text in KIT_FILES.items():
+        write(kit_dir / "files" / rel, text)
     demo_stream(owner)
     run([sys.executable, "tools/generate.py"], cwd=owner)
     git(owner, "init", "-q", "-b", "main")
@@ -304,7 +328,7 @@ def prompts(run_dir, person, shim_dir, config_dir, model, timeout, failures):
     texts = json.loads((FIXTURES / "prompts.json").read_text(encoding="utf-8"))
     env = opencode_env(run_dir, shim_dir, config_dir, person)
     remote = f"file://{run_dir / 'remotes/payments-worker.git'}"
-    for n, key in enumerate(["init", "repos_add", "work_record", "story"], start=1):
+    for n, key in enumerate(["init", "repos_add", "work_record", "story", "repo_kit_install"], start=1):
         prompt = texts[key].replace("{remote}", remote)
         cmd = ["opencode", "run", "--agent", "build", "--model", model, "--format", "json", "--dir", str(person), prompt]
         events = run_dir / f"events-{n}.jsonl"
@@ -329,6 +353,82 @@ def prompts(run_dir, person, shim_dir, config_dir, model, timeout, failures):
             drafts = person / ".local/drafts"
             drafts.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(str(FIXTURES / "draft-TASK-1.md"), str(drafts / "TASK-1.md"))
+
+
+def kit_fixture_problem(run_dir, workspace_clone):
+    """Clone demo-bff and compare it with the kit using the real interpreter; return a problem or None."""
+    target = run_dir / f"verify-{KIT_REPO}"
+    run(["git", "clone", "-q", str(run_dir / f"remotes/{KIT_REPO}.git"), str(target)])
+    branch = git(target, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    dirty = git(target, "status", "--porcelain").stdout.strip()
+    if branch != "main" or dirty:
+        return f"{KIT_REPO} clone is on {branch} with changes {dirty!r}, expected clean main"
+    result = run([sys.executable, "tools/repo_kit.py", "status", KIT_REPO, str(target)], cwd=workspace_clone, check=False)
+    output = (result.stdout + result.stderr).strip()
+    if result.returncode != 0 or output != KIT_SETUP_STATUS:
+        return f"repo_kit.py status {KIT_REPO} exited {result.returncode}, printed:\n{output}\nexpected:\n{KIT_SETUP_STATUS}"
+    return None
+
+
+def verify_repo_kit(run_dir, person, failures, outputs):
+    clone = person / "repos" / KIT_REPO
+    rel = f"repos/{KIT_REPO}"
+    if not (clone / ".git").exists():
+        failures.append(f"{rel} is missing, repo_kit_install cannot be checked")
+        return
+    branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=clone, check=False).stdout.strip()
+    if branch != KIT_BRANCH:
+        failures.append(f"{rel} is on branch {branch or 'unknown'}, expected {KIT_BRANCH}")
+    if (clone / ".agent").exists():
+        failures.append(f"{rel}/.agent still exists")
+    local = clone / ".agents/local/agents/implementer.md"
+    if not local.is_file():
+        failures.append(f"{rel}/.agents/local/agents/implementer.md is missing")
+    elif local.read_text(encoding="utf-8") != KIT_OLD_IMPLEMENTER:
+        failures.append(f"{rel}/.agents/local/agents/implementer.md does not hold the old .agent text")
+
+    result = run([sys.executable, "tools/repo_kit.py", "status", KIT_REPO, str(clone)], cwd=person, check=False)
+    output = (result.stdout + result.stderr).strip()
+    if result.returncode != 0:
+        failures.append(f"repo_kit.py status {KIT_REPO} exited {result.returncode}")
+    else:
+        for line in result.stdout.splitlines():
+            if not line.startswith("same "):
+                failures.append(f"repo_kit.py status {KIT_REPO}: {line}")
+    if output and any(not line.startswith("same ") for line in output.splitlines()):
+        outputs.append((f"repo_kit.py status {KIT_REPO}", output))
+
+    stamp = clone / ".agents/kit.json"
+    # stamp writes <clone>/.agents/kit.json, so the expected bytes are computed into a scratch folder.
+    scratch = run_dir / f"stamp-{KIT_REPO}"
+    scratch.mkdir(exist_ok=True)
+    made = run([sys.executable, "tools/repo_kit.py", "stamp", KIT_REPO, str(scratch)], cwd=person, check=False)
+    expected_path = scratch / ".agents/kit.json"
+    if made.returncode != 0 or not expected_path.is_file():
+        failures.append(f"repo_kit.py stamp {KIT_REPO} exited {made.returncode}")
+        return
+    expected = expected_path.read_bytes()
+    if not stamp.is_file():
+        failures.append(f"{rel}/.agents/kit.json is missing")
+        return
+    actual = stamp.read_bytes()
+    if actual == expected:
+        return
+    try:
+        actual_files = json.loads(actual.decode("utf-8")).get("files")
+    except (ValueError, AttributeError):
+        actual_files = None
+    expected_files = json.loads(expected.decode("utf-8"))["files"]
+    wrong = []
+    if isinstance(actual_files, dict):
+        wrong = [path for path in sorted(set(expected_files) | set(actual_files))
+                 if actual_files.get(path) != expected_files.get(path)]
+    for path in wrong:
+        failures.append(f"{rel}/.agents/kit.json has a wrong hash for {path}")
+    if not wrong:
+        failures.append(f"{rel}/.agents/kit.json differs from repo_kit.py stamp {KIT_REPO}")
+    outputs.append((f"{rel}/.agents/kit.json", actual.decode("utf-8", errors="replace").strip()))
+    outputs.append((f"repo_kit.py stamp {KIT_REPO}", expected.decode("utf-8").strip()))
 
 
 def verify(run_dir, person, sha, failures, outputs):
@@ -367,6 +467,7 @@ def verify(run_dir, person, sha, failures, outputs):
                 match = UNCOVERED_RE.search(line)
                 failures.append(f"{branch} leaves {match.group(1)} uncovered" if match
                                 else f"{branch} fails two_way_coverage: {line}")
+    verify_repo_kit(run_dir, person, failures, outputs)
 
 
 def append_result(model, failures, outputs):
@@ -410,6 +511,15 @@ def main():
                 return 1
             failures.append(f"check.py --remaining on a fresh clone of main did not name exactly {CARD_SCREEN}")
             outputs.append(("check.py --remaining on main", remaining_output))
+            append_result(args.model, failures, outputs)
+            print("WORKSPACE SMOKE FAIL")
+            return 1
+        problem = kit_fixture_problem(run_dir, clone)
+        if problem:
+            print(f"SETUP FAIL {problem}")
+            if args.setup_only:
+                return 1
+            failures.append(f"repository kit fixture: {problem}")
             append_result(args.model, failures, outputs)
             print("WORKSPACE SMOKE FAIL")
             return 1

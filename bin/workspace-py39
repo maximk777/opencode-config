@@ -25,6 +25,14 @@ TESTS=(
   tests/test_workspace_check_map.py
   tests/test_workspace_check_stories.py
   tests/test_workspace_lifecycle.py
+  tests/test_workspace_profile_ru.py
+  tests/test_workspace_kit_adopt.py
+  tests/test_workspace_normalize_fixture.py
+  tests/test_workspace_repo_kits.py
+  tests/test_workspace_repo_kit_cli.py
+  tests/test_workspace_check_repo_kits.py
+  tests/test_workspace_repo_kit_recipes.py
+  tests/test_workspace_repo_kit_flow.py
 )
 docker run --rm \
   -e PYTHONDONTWRITEBYTECODE=1 \

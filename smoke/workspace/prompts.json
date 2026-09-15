@@ -2,5 +2,6 @@
   "init": "Set up this workspace for me. My role is backend.",
   "repos_add": "Add the repository {remote} to this workspace for the backend role. Summary: Payments worker.",
   "work_record": "I finished task TASK-1. Record my work in the workspace.",
-  "story": "The demo stream has a screen that has no story yet. Create the story for it."
+  "story": "The demo stream has a screen that has no story yet. Create the story for it.",
+  "repo_kit_install": "Install the repository kit of demo-bff into my clone repos/demo-bff with the repo-kit-install skill. Python is not available, so follow the skill's steps without Python. For the edited file .agents/agents/implementer.md my decision is local. If the skill proposes an AGENTS.md line, I agree."
 }
