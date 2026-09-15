@@ -21,7 +21,33 @@ def review_status(text):
     return "needs_fix" if verdicts[-1].group(1) else "ready_to_accept"
 
 
-def read_state(root, slug, run_openspec=True):
+def memory_fields(root, slug, home=None):
+    """decisions.md path, synced_commit from the sync worker state, and HEAD of the specs repository."""
+    home = Path(home) if home else Path.home()
+    change = Path(root) / "openspec" / "changes" / slug
+    decisions = change / "decisions.md"
+    state_file = home / ".openviking" / "sync-state" / f"{Path(root).resolve().name}.json"
+    synced_commit = None
+    if state_file.exists():
+        try:
+            synced_commit = json.loads(state_file.read_text()).get("synced_commit")
+        except Exception:
+            synced_commit = None
+    head = None
+    try:
+        r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True)
+        if r.returncode == 0:
+            head = r.stdout.strip()
+    except Exception:
+        head = None
+    return {
+        "decisions": str(decisions.resolve()) if decisions.exists() else None,
+        "synced_commit": synced_commit,
+        "head": head,
+    }
+
+
+def read_state(root, slug, run_openspec=True, home=None):
     ch = Path(root) / "openspec" / "changes" / slug
     tasks = (ch / "tasks.md").read_text() if (ch / "tasks.md").exists() else ""
     done = re.findall(r"^- \[x\] (\d+(?:\.\d+)*)", tasks, re.M)
@@ -54,6 +80,7 @@ def read_state(root, slug, run_openspec=True):
         **groups,
         "current_wave": wave,
         "openspec_status": status,
+        **memory_fields(root, slug, home=home),
     }
 
 
