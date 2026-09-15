@@ -12,6 +12,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 PARAMS = ["workspace_name", "title", "forge", "id_pattern", "tracker_url"]
+OPTIONAL_PARAMS = ["language"]
 FORGES = {"gitlab", "github", "git"}
 
 
@@ -27,7 +28,7 @@ def parse_params(pairs):
         key, sep, value = pair.partition("=")
         if not sep:
             fail(f"parameter {pair!r} is not key=value")
-        if key not in PARAMS:
+        if key not in PARAMS and key not in OPTIONAL_PARAMS:
             fail(f"unknown parameter {key}")
         params[key] = value
     missing = [key for key in PARAMS if key not in params]
@@ -41,8 +42,11 @@ def parse_params(pairs):
         fail(f"parameter id_pattern is not a valid regular expression: {exc}")
     if "{id}" not in params["tracker_url"]:
         fail(f"parameter tracker_url must contain {{id}}, got {params['tracker_url']!r}")
-    # Keep the stamp in the canonical parameter order regardless of argument order.
-    return {key: params[key] for key in PARAMS}
+    if "language" in params and not re.fullmatch(r"[a-z]{2}", params["language"]):
+        fail(f"parameter language must be a two-letter lowercase code, got {params['language']!r}")
+    # Keep the stamp in the canonical parameter order regardless of argument order;
+    # optional parameters appear only when given so existing stamps stay unchanged.
+    return {key: params[key] for key in PARAMS + OPTIONAL_PARAMS if key in params}
 
 
 def substitute(text, params, json_file):
@@ -90,19 +94,73 @@ def create(target, params, kit):
     print(f"created {target} from kit {meta['name']} {meta['version']}")
 
 
+def kit_files(kit):
+    """Relative posix paths of kit files in ascending order, without __pycache__ and the kit's own kit.json."""
+    files = []
+    for path in kit.rglob("*"):
+        rel = path.relative_to(kit)
+        if "__pycache__" in rel.parts or rel.as_posix() == "kit.json" or path.is_dir():
+            continue
+        files.append(rel.as_posix())
+    return sorted(files)
+
+
+def adopt(target, params, kit):
+    """Copy absent kit files into an existing repository, report differing ones, then stamp it."""
+    meta = json.loads((kit / "kit.json").read_text(encoding="utf-8"))
+    templated = set(meta.get("templated", []))
+    copies, conflicts = [], []
+    # Plan everything first so a blocked path cannot leave a half-adopted repository.
+    for rel in kit_files(kit):
+        data = (kit / rel).read_bytes()
+        if rel in templated:
+            data = substitute(data.decode("utf-8"), params, rel.endswith(".json")).encode("utf-8")
+        dst = target / rel
+        blocked = any(parent.exists() and not parent.is_dir() for parent in dst.parents if target in parent.parents)
+        if blocked or os.path.lexists(str(dst)):
+            if blocked or not dst.is_file() or dst.read_bytes() != data:
+                conflicts.append(rel)
+        else:
+            copies.append((rel, data))
+    for rel, data in copies:
+        dst = target / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(data)
+        shutil.copymode(str(kit / rel), str(dst))
+    stamp = {"name": meta["name"], "version": meta["version"], "params": params}
+    (target / ".agents").mkdir(exist_ok=True)
+    (target / ".agents/kit.json").write_text(json.dumps(stamp, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    for rel in sorted(conflicts):
+        print(f"conflict: {rel}")
+    print(f"adopted kit {meta['name']} {meta['version']} into {target}")
+
+
 def main():
     parser = argparse.ArgumentParser(prog="workspace-kit")
     sub = parser.add_subparsers(dest="command", required=True)
-    c = sub.add_parser("create")
-    c.add_argument("target")
-    c.add_argument("--param", action="append", default=[])
-    c.add_argument("--kit", default=str(REPO / "kits/workspace"))
+    for name in ("create", "adopt"):
+        c = sub.add_parser(name)
+        c.add_argument("target")
+        c.add_argument("--param", action="append", default=[])
+        c.add_argument("--kit", default=str(REPO / "kits/workspace"))
     args = parser.parse_args()
     params = parse_params(args.param)
     kit = Path(args.kit).resolve()
     if not (kit / "kit.json").is_file():
         fail(f"kit {kit} has no kit.json")
     target = Path(args.target).resolve()
+    if args.command == "adopt":
+        if not target.is_dir():
+            fail(f"target {target} is not a directory")
+        # .git is a file in worktrees and submodules, so only its presence matters.
+        if not os.path.lexists(str(target / ".git")):
+            fail(f"target {target} is not a git repository")
+        if os.path.lexists(str(target / ".agents/kit.json")):
+            fail(f"target {target} already has .agents/kit.json")
+        if os.path.lexists(str(target / ".agents")) and not (target / ".agents").is_dir():
+            fail(f"target {target} has .agents that is not a directory")
+        adopt(target, params, kit)
+        return
     if target.exists():
         if not target.is_dir():
             fail(f"target {target} exists and is not a directory")

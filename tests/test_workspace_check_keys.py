@@ -198,6 +198,40 @@ class CheckKeysTest(unittest.TestCase):
         self.write("domains/operations/map/documents.md", "# Documents\n")
         self.assert_fails("[screen:operations/documents](../domains/operations/map/other.md)")
 
+    def rule_profile(self):
+        profile = json.loads((self.ws / ".agents/profiles/ui-migration/profile.json").read_text(encoding="utf-8"))
+        profile["name"] = "rules"
+        profile["elements"] = [{"kind": "rule", "prefix": "rule", "dir": "rules", "fields": ["key"]}]
+        self.write_json(".agents/profiles/rules/profile.json", profile)
+
+    def test_workspace_profile_element_missing(self):
+        self.rule_profile()
+        self.write("docs/notes.md", "# Notes\n\nSee [rule:billing/limits](domains/billing/rules/limits.md).\n")
+        lines = self.findings()
+        self.assertTrue(any(line.startswith("docs/notes.md:3 ") for line in lines), lines)
+
+    def test_workspace_profile_element_exists(self):
+        self.rule_profile()
+        self.write("domains/billing/rules/limits.md", "---\nkey: rule:billing/limits\n---\n")
+        self.assert_passes("[rule:billing/limits](../domains/billing/rules/limits.md)")
+        self.assert_fails("[rule:billing/limits](../domains/billing/rules/other.md)")
+
+    def test_screen_resolves_through_kit_profile(self):
+        from wslib.common import Context
+        from wslib.rules_keys import lookup
+
+        self.write("domains/operations/map/documents.md", "# Documents\n")
+        ctx = Context(self.ws)
+        self.assertEqual(lookup(ctx, "screen:operations/documents"),
+                         (True, ["domains/operations/map/documents.md"]))
+
+    def test_prefix_declared_by_no_profile_is_not_a_key(self):
+        from wslib.common import Context
+        from wslib.rules_keys import lookup
+
+        self.assert_passes("[rule:billing/limits](nowhere.md)")
+        self.assertEqual(lookup(Context(self.ws), "rule:billing/limits"), (False, []))
+
     def test_unknown_mockup(self):
         self.assert_fails("[mockup:risks/matches](https://example.test/x)")
 

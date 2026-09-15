@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
+import weakref
+from typing import Dict, List, Optional, Tuple
 
 from wslib.common import Finding, md_links, parse_frontmatter, resolve_target
+from wslib.profiles import load_profiles
 
-KEY_RE = re.compile(r"^(adr|diagram|mockup|repo|stand|domain|screen|story|stream):(.+)$")
+KEY_RE = re.compile(r"^(adr|diagram|mockup|repo|stand|domain|story|stream):(.+)$")
+ELEMENT_KEY_RE = re.compile(r"^([^:/\s]+):(.+)$")
 PAIR_RE = re.compile(r"^([^/]+)/([^/]+)$")
 STORY_RE = re.compile(r"^domains/[^/]+/streams/[^/]+/stories/[^/]+/story\.md$")
 # CommonMark: a backtick fence's info string may not contain backticks.
@@ -29,27 +32,61 @@ def _json_strings(ctx, rel: str, field: str, attr: str) -> set:
     return {value for value in values if isinstance(value, str)}
 
 
+_ELEMENT_DIRS: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
+
+
+def _element_dirs(ctx) -> Dict[str, str]:
+    """Map element key prefixes of valid profiles to their directories; cached per context."""
+    try:
+        return _ELEMENT_DIRS[ctx]
+    except (KeyError, TypeError):
+        pass
+    dirs: Dict[str, str] = {}
+    for profile in load_profiles(ctx)[0].values():
+        for element in profile["elements"]:
+            prefix = element["prefix"]
+            # Built-in prefixes keep their own resolution; the first profile wins a duplicate.
+            if ELEMENT_KEY_RE.match(prefix + ":x") and not KEY_RE.match(prefix + ":x") and prefix not in dirs:
+                dirs[prefix] = element["dir"]
+    try:
+        _ELEMENT_DIRS[ctx] = dirs
+    except TypeError:
+        pass
+    return dirs
+
+
+def is_key(ctx, text: str) -> bool:
+    """True when text has a built-in key prefix or one declared by a loaded profile."""
+    if KEY_RE.match(text):
+        return True
+    m = ELEMENT_KEY_RE.match(text)
+    return bool(m) and m.group(1) in _element_dirs(ctx)
+
+
 def lookup(ctx, key: str) -> Tuple[bool, Optional[List[str]]]:
     """Return (exists, accepted targets); targets None means the target is not checked."""
     if not isinstance(key, str):
         return False, []
-    m = KEY_RE.match(key)
+    m = KEY_RE.match(key) or ELEMENT_KEY_RE.match(key)
     if not m:
         return False, []
     kind, rest = m.group(1), m.group(2)
+    element_dir = _element_dirs(ctx).get(kind)
+    if not KEY_RE.match(key) and element_dir is None:
+        return False, []
     if kind == "adr":
         adr_re = re.compile(r"^docs/adr/" + re.escape(rest) + r"-[^/]+\.md$")
         matches = [rel for rel in ctx.files if adr_re.match(rel)]
         if len(matches) != 1:
             return False, []
         return True, matches
-    if kind in ("screen", "story", "stream"):
+    if element_dir is not None or kind in ("story", "stream"):
         pair = PAIR_RE.match(rest)
         if not pair:
             return False, []
         domain, name = pair.group(1), pair.group(2)
-        if kind == "screen":
-            target = "domains/%s/map/%s.md" % (domain, name)
+        if element_dir is not None:
+            target = "domains/%s/%s/%s.md" % (domain, element_dir, name)
         elif kind == "stream":
             target = "domains/%s/streams/%s/stream.json" % (domain, name)
         else:
@@ -160,7 +197,7 @@ def check_key_resolve(ctx) -> List[Finding]:
         if text is None:
             continue
         for line, label, target in md_links(_without_code(text)):
-            if KEY_RE.match(label):
+            if is_key(ctx, label):
                 exists, accepted = lookup(ctx, label)
                 if not exists:
                     findings.append(Finding(rel, line, "key-resolve", "unknown key %s" % label))

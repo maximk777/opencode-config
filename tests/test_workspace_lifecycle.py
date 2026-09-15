@@ -110,13 +110,13 @@ class LifecycleTest(unittest.TestCase):
     def at_goal(self):
         self.write("domains/demo/README.md", self.template(".agents/templates/domain/README.md", {"name": "demo"}))
         self.write(STREAM_JSON, self.template(".agents/templates/stream.json", {"domain": "demo", "stream": "migration"}))
-        self.write(STREAM + "/epic.md", self.template(".agents/templates/epic.md", {"Epic title": "Demo migration"}))
+        self.write(STREAM + "/epic.md", self.template(".agents/profiles/ui-migration/epic.md", {"Epic title": "Demo migration"}))
 
     def at_map(self):
         self.at_goal()
         self.screen("list", [("Open", "screen:demo/card")])
         self.screen("card")
-        text = self.template(".agents/templates/MAP.md", {"domain": "demo"})
+        text = self.template(".agents/profiles/ui-migration/MAP.md", {"domain": "demo"})
         header = "| Legacy group | Legacy item | Legacy route | Target |\n|---|---|---|---|\n"
         self.assertIn(header, text)
         text = text.replace(

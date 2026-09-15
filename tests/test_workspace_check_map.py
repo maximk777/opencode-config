@@ -267,7 +267,7 @@ class CheckMapTest(unittest.TestCase):
         self.assert_finding_at("domains/risks/MAP.md:1 map ")
 
     def test_map_with_markers_has_no_finding(self):
-        template = (REPO / "kits/workspace/.agents/templates/MAP.md").read_text(encoding="utf-8")
+        template = (REPO / "kits/workspace/.agents/profiles/ui-migration/MAP.md").read_text(encoding="utf-8")
         self.write("domains/risks/MAP.md", template.replace("<domain>", "risks"))
         self.assertEqual(self.findings(), [])
 
@@ -286,7 +286,7 @@ class CheckMapTest(unittest.TestCase):
     def test_generate_renders_map_that_check_accepts(self):
         self.stream()
         self.write(SCREEN_PATH, screen())
-        template = (REPO / "kits/workspace/.agents/templates/MAP.md").read_text(encoding="utf-8")
+        template = (REPO / "kits/workspace/.agents/profiles/ui-migration/MAP.md").read_text(encoding="utf-8")
         self.write("domains/operations/MAP.md", template.replace("<domain>", "operations"))
         self.assertEqual([line for line in self.findings() if "MAP.md" in line], [])
         result = run_generate(self.ws)

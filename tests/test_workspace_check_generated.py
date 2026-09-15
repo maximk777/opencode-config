@@ -181,7 +181,7 @@ class CheckGeneratedMapsTest(unittest.TestCase):
     def setUp(self):
         CheckGeneratedTest.setUp(self)
         self.write(".agents/profiles/ui-migration/profile.json", json.dumps(UI_MIGRATION, indent=2) + "\n")
-        template = (self.ws / ".agents/templates/MAP.md").read_text(encoding="utf-8")
+        template = (self.ws / ".agents/profiles/ui-migration/MAP.md").read_text(encoding="utf-8")
         self.write(MAP_MD, template.replace("<domain>", "operations"))
         self.write("domains/operations/map/list.md", screen("list", "/operations", 1))
         stream = {

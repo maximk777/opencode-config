@@ -13,7 +13,8 @@ How a person checks that the goal is reached.
 What the stream deliberately does not do.
 
 ## Open questions
-Questions to answer before the stage closes. Write "None." when there are none.
+Questions to answer before the stage closes. If there are none, leave `None.` as written.
+None.
 
 ## Target users
 Who uses the result and in which role.

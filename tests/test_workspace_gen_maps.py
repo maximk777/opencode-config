@@ -196,6 +196,16 @@ BREAKDOWN_HEAD = (
     "| Story | Wave | Scope | Unmapped | Tracker | Depends |\n"
     "|---|---|---|---|---|---|\n"
 )
+BREAKDOWN_ROWS = (
+    "| story:operations/documents | 1 | screen:operations/card, screen:operations/list"
+    " | Export to Excel |  |  |\n"
+    "| story:operations/reports | 2 | screen:operations/list |  | TASK-2 | story:operations/documents |\n"
+)
+RU_BREAKDOWN = {
+    "title": "Разбивка",
+    "note": "Сгенерировано tools/generate.py из stories/*/story.md. Не редактировать.",
+    "columns": ["Стори", "Волна", "Экраны", "Без экрана", "Трекер", "Зависит от"],
+}
 
 
 def stream_json(domain, stream):
@@ -316,6 +326,34 @@ class MapTablesTest(MapsTestCase):
         )
         self.assertEqual(out["domains/ops/MAP.md"], expected.encode("utf-8"))
 
+    def with_from_column(self, value, language):
+        profile = json.loads(json.dumps(UI_MIGRATION))
+        profile["map_doc"]["from_column"] = value
+        self.write(".agents/profiles/ui-migration/profile.json", json.dumps(profile, indent=2, ensure_ascii=False) + "\n")
+        params = {} if language is None else {"language": language}
+        self.write(".agents/kit.json", json.dumps({"name": "workspace", "version": "0.1.0", "params": params}) + "\n")
+        return gen_maps.render(self.root)["domains/operations/MAP.md"].decode("utf-8")
+
+    def test_russian_workspace_gets_localized_from_column(self):
+        out = self.with_from_column({"en": "From", "ru": "Откуда"}, "ru")
+        self.assertIn("<!-- map:transitions:begin -->\n| Откуда | Action | Target |\n|---|---|---|\n", out)
+        self.assertNotIn("| From |", out)
+
+    def test_english_workspace_keeps_from(self):
+        for language in ("en", None):
+            out = self.with_from_column({"en": "From", "ru": "Откуда"}, language)
+            self.assertIn("<!-- map:transitions:begin -->\n" + TRANSITIONS_TABLE, out, language)
+
+    def test_from_column_comes_from_the_profile_declaring_the_kind(self):
+        checklist = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        checklist["map_doc"]["from_column"] = "Source"
+        self.write(".agents/profiles/checklist/profile.json", json.dumps(checklist) + "\n")
+        self.write("domains/ops/rules/r1.md", "---\nkey: rule:ops/r1\nowner: me\nstory:\n---\n# R1\n")
+        self.write("domains/ops/MAP.md", "# Ops\n<!-- map:checks:begin -->\n<!-- map:checks:end -->\n")
+        out = gen_maps.render(self.root)
+        self.assertIn("| Source | Check | Target |\n", out["domains/ops/MAP.md"].decode("utf-8"))
+        self.assertIn(TRANSITIONS_TABLE, out["domains/operations/MAP.md"].decode("utf-8"))
+
 
 class MapSourceShapesTest(MapsTestCase):
     def expected_map(self, screens=SCREENS_TABLE, transitions=TRANSITIONS_TABLE):
@@ -368,12 +406,7 @@ class MapSourceShapesTest(MapsTestCase):
 class BreakdownTest(MapsTestCase):
     def test_exact_breakdown_in_slug_order(self):
         out = gen_maps.render(self.root)
-        expected = (
-            BREAKDOWN_HEAD
-            + "| story:operations/documents | 1 | screen:operations/card, screen:operations/list"
-            " | Export to Excel |  |  |\n"
-            + "| story:operations/reports | 2 | screen:operations/list |  | TASK-2 | story:operations/documents |\n"
-        )
+        expected = BREAKDOWN_HEAD + BREAKDOWN_ROWS
         self.assertEqual(out["domains/operations/streams/main/BREAKDOWN.md"], expected.encode("utf-8"))
 
     def test_stream_without_stories_has_header_only(self):
@@ -386,6 +419,38 @@ class BreakdownTest(MapsTestCase):
         self.write("domains/operations/streams/broken/stream.json", "{not json\n")
         self.write("domains/operations/streams/broken/stories/a/story.md", STORY_DOCUMENTS)
         self.assertNotIn("domains/operations/streams/broken/BREAKDOWN.md", gen_maps.render(self.root))
+
+    def test_breakdown_block_sets_title_note_and_columns(self):
+        profile = dict(UI_MIGRATION, name="team-flow", breakdown=RU_BREAKDOWN)
+        self.write(
+            ".agents/profiles/team-flow/profile.json",
+            json.dumps(profile, indent=2, ensure_ascii=False) + "\n",
+        )
+        self.write(
+            "domains/operations/streams/main/stream.json",
+            stream_json("operations", "main").replace('"ui-migration"', '"team-flow"'),
+        )
+        out = gen_maps.render(self.root)
+        expected = (
+            "# Разбивка stream:operations/main\n"
+            "\n"
+            "Сгенерировано tools/generate.py из stories/*/story.md. Не редактировать.\n"
+            "\n"
+            "| Стори | Волна | Экраны | Без экрана | Трекер | Зависит от |\n"
+            "|---|---|---|---|---|---|\n"
+            + BREAKDOWN_ROWS
+        )
+        self.assertEqual(out["domains/operations/streams/main/BREAKDOWN.md"], expected.encode("utf-8"))
+
+    def test_stream_with_unknown_profile_uses_default_breakdown(self):
+        self.write(
+            "domains/operations/streams/main/stream.json",
+            stream_json("operations", "main").replace('"ui-migration"', '"missing"'),
+        )
+        out = gen_maps.render(self.root)
+        self.assertEqual(
+            out["domains/operations/streams/main/BREAKDOWN.md"], (BREAKDOWN_HEAD + BREAKDOWN_ROWS).encode("utf-8")
+        )
 
     def test_story_with_broken_frontmatter_is_skipped(self):
         self.write("domains/operations/streams/main/stories/reports/story.md", "---\nkey: story:x\n")

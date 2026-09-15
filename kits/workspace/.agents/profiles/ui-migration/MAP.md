@@ -18,7 +18,8 @@ How a user reaches the screens of this domain: menu sections, entry points and a
 |---|---|---|---|
 
 ## Decisions
-Decisions about the map, with `adr:` keys when an ADR exists. Write "None." when there are none.
+Decisions about the map, with `adr:` keys when an ADR exists. Write `None.` when there are none.
 
 ## Open questions
-Questions left open about the map. Write "None." when there are none.
+Questions left open about the map. If there are none, leave `None.` as written.
+None.
