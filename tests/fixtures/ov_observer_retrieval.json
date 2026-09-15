@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "result": {
+    "name": "retrieval",
+    "is_healthy": true,
+    "has_errors": false,
+    "status": "+---------------------+-----------------+\n|       Metric        |      Value      |\n+---------------------+-----------------+\n|    Total Queries    |       123       |\n|    Total Results    |       458       |\n|  Avg Results/Query  |       3.7       |\n| Zero-Result Queries |        0        |\n|  Zero-Result Rate   |      0.0%       |\n|      Avg Score      |     0.5784      |\n|     Score Range     | 0.3313 - 0.9511 |\n|     Rerank Used     |        0        |\n|   Rerank Fallback   |        0        |\n|  Avg Latency (ms)   |      317.0      |\n|  Max Latency (ms)   |     2052.9      |\n+---------------------+-----------------+\n\n+--------------+---------+\n| Context Type | Queries |\n+--------------+---------+\n|   unknown    |   123   |\n+--------------+---------+"
+  }
+}

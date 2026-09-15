@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Background worker that syncs queued or changed specs projects into OpenViking."""
+import fcntl
+import subprocess
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "lib"))
+
+from ovsync import due, mirror, nightly, runner, scope, state  # noqa: E402
+
+TICK = 15.0
+
+# Last scope-file problem logged per scope path; logged again only after a successful read.
+_scope_problems = {}
+
+
+def acquire_lock(paths):
+    """Return the open lock file on success, None when another worker holds it."""
+    paths.lock.parent.mkdir(parents=True, exist_ok=True)
+    fd = open(paths.lock, "a+")
+    try:
+        fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fd.close()
+        return None
+    return fd
+
+
+def _log_scope_problem(paths, message):
+    key = str(paths.scope)
+    if _scope_problems.get(key) != message:
+        state.append_log(paths, "-", "skipped", message)
+        _scope_problems[key] = message
+
+
+def tick(paths, run, clock, sleep, now_local):
+    try:
+        text = paths.scope.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        _log_scope_problem(paths, "sync-scope missing")
+        return
+    except OSError as exc:
+        _log_scope_problem(paths, f"sync-scope unreadable: {exc}")
+        return
+    _scope_problems[str(paths.scope)] = None
+
+    try:
+        rules = scope.parse(text)
+        # Invalid names must never reach state.py or runner.py, both of which raise ValueError for them.
+        projects = [p for p in due.list_projects(paths.specs) if state.valid_project(p)]
+        now = clock()
+        heads = {p: due.head_info(run, paths.specs / p) for p in projects}
+        states = {p: state.read_state(paths, p) for p in projects}
+        markers = state.markers(paths)
+        due_list = due.due_projects(projects, heads, states, markers, now)
+    except Exception as exc:
+        # A crash while collecting due projects must not end the process (launchd would
+        # crash-loop it); skip this tick entirely so the next tick retries with fresh data.
+        state.append_log(paths, "-", "failed", f"collection: {exc!r}")
+        return
+
+    for project in due_list:
+        try:
+            runner.sync_project(paths, project, run, clock, sleep, rules)
+        except Exception as exc:  # one bad project must not stop the tick
+            state.append_log(paths, project, "failed", str(exc))
+
+    try:
+        nightly_state = state.read_nightly(paths)
+        if nightly.is_due(nightly_state, now_local()):
+            nightly.run_nightly(paths, run, clock, sleep, now_local, projects)
+    except Exception as exc:
+        state.append_log(paths, "-", "failed", f"nightly: {exc!r}")
+
+
+def _run_tick(paths, run, clock, sleep, now_local):
+    """Last-resort guard: even a tick that raises outright must not end the process."""
+    try:
+        tick(paths, run, clock, sleep, now_local)
+    except Exception as exc:
+        state.append_log(paths, "-", "failed", f"tick: {exc!r}")
+
+
+def main(argv, paths=None, run=subprocess.run, clock=time.time, sleep=time.sleep, now_local=datetime.now):
+    if argv not in ([], ["--once"]):
+        print("usage: ov-syncd [--once]", file=sys.stderr)
+        return 2
+    paths = paths or state.Paths.default(REPO)
+    lock = acquire_lock(paths)
+    if lock is None:
+        state.append_log(paths, "-", "skipped", "worker already running")
+        return 0
+    try:
+        mirror.cleanup_stage(paths.stage)
+    except OSError as exc:
+        state.append_log(paths, "-", "failed", f"cleanup: {exc!r}")
+    if argv == ["--once"]:
+        _run_tick(paths, run, clock, sleep, now_local)
+        return 0
+    try:
+        while True:
+            _run_tick(paths, run, clock, sleep, now_local)
+            sleep(TICK)
+    except KeyboardInterrupt:
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

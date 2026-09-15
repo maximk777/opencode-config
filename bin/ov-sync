@@ -1,34 +1,69 @@
 #!/usr/bin/env python3
-import subprocess
+"""Queue a specs project for the OpenViking sync worker, or show the queue."""
 import sys
+from datetime import datetime
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "lib"))
+
+from ovsync import state  # noqa: E402
+
+USAGE = "usage: ov-sync <project> | ov-sync --status"
 
 
-def build_command(project):
-    return [
-        "docker", "exec", "openviking", "ov", "add-resource", f"/specs/{project}",
-        "--to", f"viking://resources/{project}/specs",
-        "--args", "parse_mode:no_split",
-    ]
+def _iso(ts):
+    return datetime.fromtimestamp(ts).isoformat(timespec="seconds") if ts else "-"
 
 
-def sync(project, run=subprocess.run):
-    try:
-        r = run(build_command(project), capture_output=True, text=True, timeout=600)
-    except FileNotFoundError:
-        print("ov-sync: docker not installed, skipped")
+def status_lines(paths):
+    """One line per project: '<p>: <queued|running|failing|idle> last=<result> commit=<7 chars>' plus details."""
+    marker_times = state.markers(paths)
+    states = state.list_states(paths)
+    projects = sorted(set(marker_times) | set(states))
+    lines = []
+    for project in projects:
+        s = states.get(project, state.EMPTY_STATE)
+        if s.get("running"):
+            phase = "running"
+        elif s.get("failing"):
+            phase = "failing"
+        elif project in marker_times:
+            phase = "queued"
+        else:
+            phase = "idle"
+        commit = (s.get("synced_commit") or "-")[:7]
+        line = f"{project}: {phase} last={s.get('result') or '-'} commit={commit}"
+        if s.get("synced_at"):
+            line += f" synced={_iso(s['synced_at'])}"
+        error = s.get("error")
+        # "OpenViking unavailable" is redundant with the "unavailable since" suffix below;
+        # printing it too would read as "unavailable unavailable".
+        if error and not (s.get("result") == "unavailable" and error == "OpenViking unavailable"):
+            line += f" error={error}"
+        if s.get("unavailable_since"):
+            line += f" unavailable since {_iso(s['unavailable_since'])}"
+        lines.append(line)
+    return lines
+
+
+def main(argv, paths=None, now=None):
+    paths = paths or state.Paths.default(REPO)
+    if argv == ["--status"]:
+        lines = status_lines(paths)
+        if not lines:
+            print("ov-sync: nothing queued or synced")
+        else:
+            for line in lines:
+                print(line)
         return 0
-    except subprocess.TimeoutExpired:
-        print("ov-sync: docker exec timed out", file=sys.stderr)
-        return 1
-    if r.returncode != 0:
-        sys.stderr.write(r.stderr)
-        print(f"ov-sync: docker exec failed with exit {r.returncode}", file=sys.stderr)
-        return r.returncode
-    print(f"ov-sync: synced viking://resources/{project}/specs")
+    if len(argv) != 1 or not state.valid_project(argv[0]):
+        print(USAGE, file=sys.stderr)
+        return 2
+    state.touch_marker(paths, argv[0], now=now)
+    print(f"ov-sync: queued {argv[0]}")
     return 0
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        sys.exit("usage: ov-sync <project>")
-    sys.exit(sync(sys.argv[1]))
+    sys.exit(main(sys.argv[1:]))

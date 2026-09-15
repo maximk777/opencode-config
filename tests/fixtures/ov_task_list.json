@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "task_id": "f35e5cc3-6342-47fc-86f7-ad3ca67d7197",
+      "task_type": "add_resource",
+      "status": "completed",
+      "created_at": 1789376699.274354,
+      "updated_at": 1789376827.0084903,
+      "resource_id": "viking://resources/demo/specs",
+      "meta": {
+        "source_path": "/specs/.ov-stage/demo"
+      },
+      "stage": "completed",
+      "result": {
+        "status": "success"
+      },
+      "error": null,
+      "created_at_iso": "2026-09-14T09:04:59.274354+00:00",
+      "updated_at_iso": "2026-09-14T09:07:07.008490+00:00"
+    },
+    {
+      "task_id": "af317b25-5864-4a65-a7aa-b5bb9934e442",
+      "task_type": "add_resource",
+      "status": "running",
+      "created_at": 1789376203.9732494,
+      "updated_at": 1789376294.9129906,
+      "resource_id": "viking://resources/demo/specs",
+      "meta": {
+        "source_path": "/specs/.ov-stage/demo"
+      },
+      "stage": "running",
+      "result": null,
+      "error": null,
+      "created_at_iso": "2026-09-14T08:56:43.973249+00:00",
+      "updated_at_iso": "2026-09-14T08:58:14.912991+00:00"
+    }
+  ]
+}

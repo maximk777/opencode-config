@@ -1,0 +1,12 @@
+# Paths that enter the OpenViking index. The last matching line decides; unmatched paths stay out.
+architecture/**
+!architecture/poc/*/**
+architecture/poc/*/README.md
+architecture/poc/*/RESULT.md
+!architecture/diagrams/**
+architecture/diagrams/**/*.md
+openspec/specs/**
+harness/**
+openspec/changes/**/proposal.md
+openspec/changes/**/design.md
+openspec/changes/**/decisions.md
