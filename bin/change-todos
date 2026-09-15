@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""Prints the session todo list of a change as JSON for OpenCode's todowrite tool."""
+from __future__ import annotations
+
+import importlib.machinery
+import json
+import re
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+sys.dont_write_bytecode = True  # loading change-state as a module must not write bin/__pycache__/*.pyc
+change_state = importlib.machinery.SourceFileLoader("change_state", str(REPO / "bin" / "change-state")).load_module()
+
+GROUP = re.compile(r"^## (\d+)\. (.+?)\s*$")
+TASK = re.compile(r"^- \[( |x)\] (\d+(?:\.\d+)*) (.+?)\s*$")
+WAVE = re.compile(r"^wave (\d+): (.*)$")
+SUFFIX = {"awaiting_review": " (review)", "needs_fix": " (fix)", "ready_to_accept": " (accept)"}
+
+
+def parse_tasks(text):
+    """Groups of tasks.md in file order: {"number": str|None, "title": str|None, "tasks": [{"id", "title", "done"}]}; tasks before the first heading form a group with number None."""
+    groups = [{"number": None, "title": None, "tasks": []}]
+    for line in text.splitlines():
+        m = GROUP.match(line)
+        if m:
+            groups.append({"number": m.group(1), "title": m.group(2), "tasks": []})
+            continue
+        m = TASK.match(line)
+        if m:
+            groups[-1]["tasks"].append({"id": m.group(2), "title": m.group(3), "done": m.group(1) == "x"})
+    return groups
+
+
+def item(content, status, priority):
+    return {"content": content, "status": status, "priority": priority}
+
+
+def wave_tasks(change, number):
+    """Task ids of wave <number> in waves.md; empty when the file or the wave is missing."""
+    waves_file = Path(change) / "waves.md"
+    if number is None or not waves_file.is_file():
+        return []
+    for line in waves_file.read_text().splitlines():
+        m = WAVE.match(line)
+        if m and int(m.group(1)) == number:
+            return m.group(2).split()
+    return []
+
+
+def task_item(task, wave, state):
+    """One expanded item: completed when checked, in_progress with a report suffix in the current wave, pending otherwise."""
+    tid, title = task["id"], task["title"]
+    if task["done"]:
+        return item(f"{tid} {title}", "completed", "low")
+    if tid in wave:
+        suffix = next((SUFFIX[k] for k in SUFFIX if tid in state[k]), "")
+        return item(f"{tid} {title}{suffix}", "in_progress", "high")
+    return item(f"{tid} {title}", "pending", "medium")
+
+
+def build(root, slug):
+    """Todo items for a change; raises FileNotFoundError naming the missing change directory or tasks.md."""
+    change = Path(root) / "openspec" / "changes" / slug
+    if not change.is_dir():
+        raise FileNotFoundError(f"no change directory {change}")
+    tasks_file = change / "tasks.md"
+    if not tasks_file.is_file():
+        raise FileNotFoundError(f"no tasks.md in {change}")
+    state = change_state.read_state(root, slug, run_openspec=False)
+    wave = wave_tasks(change, state["current_wave"])
+    items = []
+    for group in parse_tasks(tasks_file.read_text()):
+        tasks = group["tasks"]
+        if not tasks:
+            continue
+        if group["number"] is None:
+            for t in tasks:
+                items.append(task_item(t, wave, state))
+            continue
+        done = sum(1 for t in tasks if t["done"])
+        content = f"{group['number']}. {group['title']} ({done}/{len(tasks)})"
+        if done == len(tasks):
+            items.append(item(content, "completed", "low"))
+        elif any(t["id"] in wave for t in tasks):
+            for t in tasks:
+                items.append(task_item(t, wave, state))
+        else:
+            items.append(item(content, "pending", "medium"))
+    return items
+
+
+def main(argv):
+    if len(argv) != 2:
+        print("usage: change-todos <specs-root> <slug>", file=sys.stderr)
+        return 2
+    try:
+        items = build(argv[0], argv[1])
+    except FileNotFoundError as err:
+        print(f"change-todos: {err}", file=sys.stderr)
+        return 1
+    print(json.dumps(items, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
