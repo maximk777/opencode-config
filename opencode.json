@@ -125,6 +125,27 @@
         "websearch": "allow"
       }
     },
+    "ui-designer": {
+      "mode": "subagent",
+      "description": "Renders and validates screen mockups from a MAP spec using style kits",
+      "model": "{file:./tiers/smart}",
+      "prompt": "{file:./prompts/ui-designer.md}",
+      "steps": 60,
+      "permission": {
+        "edit": {
+          "*": "deny",
+          "mockups/**": "allow",
+          "**/mockups/**": "allow"
+        },
+        "task": "deny",
+        "bash": {
+          "*": "deny",
+          "~/.config/opencode/bin/designer-*": "allow",
+          "/Users/*/.config/opencode/bin/designer-*": "allow"
+        }
+      },
+      "hidden": false
+    },
     "orchestrator": {
       "mode": "primary",
       "description": "Runs one change from brainstorm to archive",

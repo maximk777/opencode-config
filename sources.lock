@@ -5,3 +5,6 @@ superpowers-writing-plans	obra/superpowers	b36e0829c6d0	skills/change-plan/SKILL
 openspec-cli	Fission-AI/OpenSpec	1.6.0	skills/change-spec/SKILL.md
 opencode	anomalyco/opencode	1.18.30	opencode.json
 openviking	volcengine/OpenViking	v0.4.19	openviking/docker-compose.yml
+plain-tokens	local authored	1.0.0	assets/designer/plain-tokens/1.0.0/
+antd-kit	cdn.jsdelivr.net/npm (antd@6.5.4, react@18.3.1, dayjs@1.11.13)	6.5.4	assets/designer/antd/6.5.4/
+tailwind-daisyui-kit	cdn.tailwindcss.com/3.4.16 + cdn.jsdelivr.net/npm/daisyui@4.12.24	4.12.24	assets/designer/tailwind-daisyui/4.12.24/

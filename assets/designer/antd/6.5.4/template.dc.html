@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="vendor/antd/6.5.4/vendor/reset.css">
+  <script src="vendor/antd/6.5.4/vendor/react.production.min.js"></script>
+  <script src="vendor/antd/6.5.4/vendor/react-dom.production.min.js"></script>
+  <script src="vendor/antd/6.5.4/vendor/dayjs.min.js"></script>
+  <script src="vendor/antd/6.5.4/vendor/dayjs-plugin-customParseFormat.js"></script>
+  <script src="vendor/antd/6.5.4/vendor/dayjs-plugin-weekday.js"></script>
+  <script src="vendor/antd/6.5.4/vendor/dayjs-plugin-localeData.js"></script>
+  <script src="vendor/antd/6.5.4/vendor/dayjs-plugin-weekOfYear.js"></script>
+  <script src="vendor/antd/6.5.4/vendor/dayjs-plugin-weekYear.js"></script>
+  <script src="vendor/antd/6.5.4/vendor/dayjs-plugin-advancedFormat.js"></script>
+  <script src="vendor/antd/6.5.4/vendor/dayjs-plugin-quarterOfYear.js"></script>
+  <script src="vendor/antd/6.5.4/vendor/antd.min.js"></script>
+</head>
+<body>
+<main id="root" class="artboard"></main>
+<script>
+  dayjs.extend(window.dayjs_plugin_customParseFormat);
+  dayjs.extend(window.dayjs_plugin_weekday);
+  dayjs.extend(window.dayjs_plugin_localeData);
+  dayjs.extend(window.dayjs_plugin_weekOfYear);
+  dayjs.extend(window.dayjs_plugin_weekYear);
+  dayjs.extend(window.dayjs_plugin_advancedFormat);
+  dayjs.extend(window.dayjs_plugin_quarterOfYear);
+  const { ConfigProvider } = antd;
+  function App() {
+    /* compose per CHEATSHEET.md; wrap in ConfigProvider if a theme token is needed
+       (antd.min.js ships no locale bundles, so screens render with the default locale) */
+    return null;
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>

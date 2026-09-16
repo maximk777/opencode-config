@@ -1,0 +1,7 @@
+{
+  "mockups": {
+    "mockup:clients/clients": {"artboard": "Clients", "screen": "screen:clients/clients", "feature": "clients", "kit": "fake", "kit_version": "1.0.0"},
+    "mockup:clients/legacy": {"artboard": "Legacy", "screen": "screen:clients/other", "note": "ARM shaped"}
+  },
+  "none": []
+}

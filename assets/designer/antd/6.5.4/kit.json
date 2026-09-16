@@ -1,0 +1,18 @@
+{
+  "name": "antd",
+  "version": "6.5.4",
+  "vendor": [
+    {"path": "vendor/react.production.min.js", "url": "https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js", "sha256": "d949f1c3687aedadcedac85261865f29b17cd273997e7f6b2bfc53b2f9d4c4dd"},
+    {"path": "vendor/react-dom.production.min.js", "url": "https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js", "sha256": "35f4f974f4b2bcd44da73963347f8952e341f83909e4498227d4e26b98f66f0d"},
+    {"path": "vendor/dayjs.min.js", "url": "https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js", "sha256": "9cfdb93f38afcf2d076abecd66d32bfd3383cdf1967654ebc26a26605daf4173"},
+    {"path": "vendor/dayjs-plugin-customParseFormat.js", "url": "https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/customParseFormat.js", "sha256": "b199a58d0fbbdc519a072eb9b140a2ca3d4775ea1b054a0c0e5aeed86603c941"},
+    {"path": "vendor/dayjs-plugin-weekday.js", "url": "https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/weekday.js", "sha256": "c5ffac8fb7deb86ff2920f6a4f123f9053ced09c81f6e784bf3b60b63ac49b96"},
+    {"path": "vendor/dayjs-plugin-localeData.js", "url": "https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/localeData.js", "sha256": "16e8ff612ead60f8c36e8045c486e4320acd5e53e61db7d644d343236248e78a"},
+    {"path": "vendor/dayjs-plugin-weekOfYear.js", "url": "https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/weekOfYear.js", "sha256": "fb7e9b4b213b2b7294fd5236bb4878b62e688292cf2c07745f0c7ff00762833f"},
+    {"path": "vendor/dayjs-plugin-weekYear.js", "url": "https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/weekYear.js", "sha256": "c3e73c56b2351e2bb14fd79bca54c6af4048202e77ce6da529785a85edb65ba1"},
+    {"path": "vendor/dayjs-plugin-advancedFormat.js", "url": "https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/advancedFormat.js", "sha256": "6f9ca609c4af60f2a03033e72dec5714f4f8e7b240381934040f547a0282463f"},
+    {"path": "vendor/dayjs-plugin-quarterOfYear.js", "url": "https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/quarterOfYear.js", "sha256": "ac0de30250d6ae30a9c230efaace353a0914a461ac86e5e8c7c27b4ab37bd560"},
+    {"path": "vendor/antd.min.js", "url": "https://cdn.jsdelivr.net/npm/antd@6.5.4/dist/antd.min.js", "sha256": "af24514abbc5d5b8c966499901b2c7f34a901c24451997c0d11bc06b18b99097"},
+    {"path": "vendor/reset.css", "url": "https://cdn.jsdelivr.net/npm/antd@6.5.4/dist/reset.css", "sha256": "89ff6ee11a65c95b146579ba0168836d5b0e4e781ab88c0914da8e7628a3f023"}
+  ]
+}

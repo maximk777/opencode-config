@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+"""Install, list and ensure ui-designer style kits."""
+# subcommands:
+#   install <kit> <version> [--source PATH] [--cache DIR]
+#                                          download vendor per kit.json into the cache
+#                                          (atomic: vendor/<file>.tmp then rename; sha256 verify)
+#   list [--cache DIR]                    print "<name> <version>" per cached kit
+#   ensure <mockups-dir> <kit> <version> [--cache DIR]
+#                                          copy cache kit dir -> mockups/vendor/<kit>/<version>/
+#                                          (copy to .tmp dir, rename after success)
+#   sync <mockups-dir> [--cache DIR]      align vendor/ with the mockups.json pins:
+#                                          ensure each pinned (kit, version), drop unpinned copies
+# default cache: ~/.config/opencode/assets/designer
+# missing cache entry: exit 3, stderr "kit <k> <v> not in cache; run:
+#   bin/designer-kit install <k> <v>" -- no CDN fallback, no vendor/ side effects
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import sys
+import urllib.request
+from pathlib import Path
+
+DEFAULT_CACHE = Path.home() / ".config/opencode/assets/designer"
+EXIT_ERROR = 1
+EXIT_USAGE = 2
+EXIT_MISSING_CACHE = 3
+
+
+def sha256_hex(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def read_manifest(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def vendor_entries(manifest):
+    return manifest.get("vendor", [])
+
+
+def install_vendor(kit, version, manifest, cache):
+    """Download each vendor entry into the cache; returns error strings (empty on success)."""
+    base = Path(cache) / kit / version
+    errors = []
+    for entry in vendor_entries(manifest):
+        rel, url, want = entry["path"], entry["url"], entry["sha256"]
+        # non http/file urls (e.g. "local:authored") are committed assets already
+        # in the cache; install never downloads them
+        if not (url.startswith("http://") or url.startswith("https://") or url.startswith("file://")):
+            continue
+        dest = base / rel
+        tmp = dest.with_name(dest.name + ".tmp")
+        try:
+            # some CDNs (cdn.tailwindcss.com) 403 the default Python-urllib UA
+            req = urllib.request.Request(url, headers={"User-Agent": "designer-kit/1.0"})
+            with urllib.request.urlopen(req) as resp:
+                data = resp.read()
+            if sha256_hex(data) != want:
+                errors.append(f"{rel}: sha256 mismatch (want {want}, got {sha256_hex(data)})")
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                with open(tmp, "wb") as f:
+                    f.write(data)
+                os.replace(tmp, dest)
+            finally:
+                if tmp.exists():
+                    tmp.unlink()
+        except Exception as e:  # network, fs or url errors must not abort the remaining entries
+            errors.append(f"{rel}: download failed: {e}")
+    return errors
+
+
+def cmd_install(args):
+    if not args.source:
+        print("designer-kit install: --source (kit.json path or its directory) is required", file=sys.stderr)
+        return EXIT_USAGE
+    src = Path(args.source)
+    if src.is_dir():
+        src = src / "kit.json"
+    try:
+        manifest = read_manifest(src)
+    except (OSError, ValueError) as e:
+        print(f"designer-kit install: cannot read kit.json: {e}", file=sys.stderr)
+        return EXIT_ERROR
+    kit, version = manifest.get("name"), manifest.get("version")
+    if kit != args.kit or version != args.version:
+        print(f"designer-kit install: kit.json describes {kit} {version}, requested {args.kit} {args.version}", file=sys.stderr)
+        return EXIT_ERROR
+    errors = install_vendor(args.kit, args.version, manifest, args.cache)
+    for e in errors:
+        print(f"designer-kit install: {e}", file=sys.stderr)
+    return EXIT_ERROR if errors else 0
+
+
+def cmd_list(args):
+    cache = Path(args.cache)
+    if not cache.is_dir():
+        return 0
+    for kit in sorted(p for p in cache.iterdir() if p.is_dir()):
+        for version in sorted(p for p in kit.iterdir() if (p / "kit.json").is_file()):
+            print(f"{kit.name} {version.name}")
+    return 0
+
+
+def verify_vendor(root, manifest):
+    """Check the vendor assets promised by the manifest really sit in the copied tree."""
+    errors = []
+    for entry in vendor_entries(manifest):
+        f = root / entry["path"]
+        if not f.is_file():
+            errors.append(f"{entry['path']}: missing from cache kit")
+            continue
+        got = sha256_hex(f.read_bytes())
+        if got != entry["sha256"]:
+            errors.append(f"{entry['path']}: sha256 mismatch (want {entry['sha256']}, got {got})")
+    return errors
+
+
+def prune_empty(path, stop):
+    """Remove now-empty dirs left behind by a failed ensure, but never the mockups root."""
+    path = Path(path)
+    stop = Path(stop)
+    while path != stop:
+        try:
+            path.rmdir()
+        except OSError:
+            break
+        path = path.parent
+
+
+def ensure_kit(mockups_dir, kit, version, cache):
+    """Copy cache kit dir -> mockups vendor/<kit>/<version>/; prints errors, returns an exit code."""
+    cache = Path(cache)
+    src = cache / kit / version
+    if not (src / "kit.json").is_file():
+        print(
+            f"kit {kit} {version} not in cache; run:\n  bin/designer-kit install {kit} {version}",
+            file=sys.stderr,
+        )
+        return EXIT_MISSING_CACHE
+    manifest = read_manifest(src / "kit.json")
+    mockups = Path(mockups_dir)
+    kit_root = mockups / "vendor" / kit
+    dest = kit_root / version
+    tmp = kit_root / f".{version}.tmp-{os.getpid()}"
+    kit_root.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copytree(src, tmp)
+        errors = verify_vendor(tmp, manifest)
+        if errors:
+            for e in errors:
+                print(f"designer-kit ensure: {e}", file=sys.stderr)
+            return EXIT_ERROR
+        if dest.exists():
+            shutil.rmtree(dest)
+        os.replace(tmp, dest)
+    finally:
+        if tmp.exists():
+            shutil.rmtree(tmp, ignore_errors=True)
+        prune_empty(kit_root, mockups)
+    return 0
+
+
+def cmd_ensure(args):
+    return ensure_kit(args.mockups_dir, args.kit, args.version, args.cache)
+
+
+def cmd_sync(args):
+    mockups = Path(args.mockups_dir)
+    manifest_path = mockups / "mockups.json"
+    if not manifest_path.is_file():
+        print(f"designer-kit sync: no mockups.json in {mockups}", file=sys.stderr)
+        return EXIT_ERROR
+    try:
+        manifest = read_manifest(manifest_path)
+    except (OSError, ValueError) as e:
+        print(f"designer-kit sync: cannot read mockups.json: {e}", file=sys.stderr)
+        return EXIT_ERROR
+    entries = (manifest.get("mockups") or {}).values()
+    pins = sorted({(e["kit"], e["kit_version"]) for e in entries if e.get("kit") and e.get("kit_version")})
+    for kit, version in pins:
+        rc = ensure_kit(mockups, kit, version, args.cache)
+        if rc:
+            return rc
+    # prune only after every pin is in place, so a failed sync leaves the tree untouched
+    vendor = mockups / "vendor"
+    if vendor.is_dir():
+        for kit_dir in sorted(p for p in vendor.iterdir() if p.is_dir()):
+            for version_dir in sorted(p for p in kit_dir.iterdir() if p.is_dir()):
+                if (kit_dir.name, version_dir.name) not in pins:
+                    shutil.rmtree(version_dir)
+            prune_empty(kit_dir, mockups)
+    return 0
+
+
+def add_cache_option(sp):
+    # --cache goes on each subcommand: usage is "ensure <dir> <kit> <v> [--cache DIR]"
+    sp.add_argument("--cache", default=str(DEFAULT_CACHE), help="shared kit cache directory")
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="designer-kit", description="Install, list and ensure ui-designer style kits.")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sp = sub.add_parser("install", help="download vendor files per kit.json into the cache")
+    sp.add_argument("kit")
+    sp.add_argument("version")
+    sp.add_argument("--source", help="kit.json file, or directory holding it; file:// urls need no network")
+    add_cache_option(sp)
+    sp.set_defaults(func=cmd_install)
+
+    sp = sub.add_parser("list", help="print cached kits as '<name> <version>'")
+    add_cache_option(sp)
+    sp.set_defaults(func=cmd_list)
+
+    sp = sub.add_parser("ensure", help="copy a cached kit into a mockups project")
+    sp.add_argument("mockups_dir")
+    sp.add_argument("kit")
+    sp.add_argument("version")
+    add_cache_option(sp)
+    sp.set_defaults(func=cmd_ensure)
+
+    sp = sub.add_parser("sync", help="refresh mockups vendor copies to the mockups.json pins")
+    sp.add_argument("mockups_dir")
+    add_cache_option(sp)
+    sp.set_defaults(func=cmd_sync)
+
+    args = p.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

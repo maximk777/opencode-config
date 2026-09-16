@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""Validate a ui-designer mockups directory against its MAP manifest."""
+import json
+import re
+import sys
+from pathlib import Path
+
+USAGE = "usage: designer-validate <mockups-dir> --map <MAP.md>"
+
+ENTRY_REQUIRED = ("artboard", "screen")
+ENTRY_OPTIONAL = ("note", "feature", "kit", "kit_version")
+ARTBOARD_BANNED = ("<x-dc", "<helmet", "support.js")
+# zero-network invariant: only <script src> and <link href> may pull assets
+REF_RES = (
+    re.compile(r"<script\b[^>]*\bsrc=[\"']([^\"']+)[\"']"),
+    re.compile(r"<link\b[^>]*\bhref=[\"']([^\"']+)[\"']"),
+)
+
+
+def load_json(path, errors):
+    """Parse a JSON file or record a finding and return None."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        errors.append(f"{path.name}: cannot parse {path}")
+        return None
+
+
+def check_manifest_schema(manifest, findings):
+    mockups = manifest.get("mockups")
+    if not isinstance(mockups, dict):
+        findings.append('mockups.json: missing "mockups" mapping')
+        return
+    allowed = ENTRY_REQUIRED + ENTRY_OPTIONAL
+    for key, entry in sorted(mockups.items()):
+        if not key.startswith("mockup:"):
+            findings.append(f"mockups.json: unexpected key {key} (expected mockup:<domain>/<name>)")
+            continue
+        if not isinstance(entry, dict):
+            findings.append(f"mockups.json: entry {key} must be a mapping")
+            continue
+        for field in ENTRY_REQUIRED:
+            if not isinstance(entry.get(field), str) or not entry.get(field):
+                findings.append(f"mockups.json: entry {key} missing required field {field}")
+        for field in entry:
+            if field not in allowed:
+                findings.append(f"mockups.json: unexpected field {field} in {key}")
+    none_list = manifest.get("none", [])
+    if not isinstance(none_list, list) or not all(isinstance(k, str) for k in none_list):
+        findings.append('mockups.json: "none" must be a list of screen keys')
+
+
+def check_canvas_schema(canvas, findings):
+    for feature in canvas.get("features", []):
+        for field in ("feature", "title"):
+            if not isinstance(feature.get(field), str) or not feature.get(field):
+                findings.append(f"canvas.json: feature lane missing field {field}")
+        lane = feature.get("lane")
+        if not isinstance(lane, int) or isinstance(lane, bool):
+            findings.append("canvas.json: feature lane missing field lane")
+    for artboard in canvas.get("artboards", []):
+        for field in ("file", "title", "feature"):
+            if not isinstance(artboard.get(field), str) or not artboard.get(field):
+                findings.append(f"canvas.json: artboard missing field {field}")
+        for field in ("x", "y", "w", "h"):
+            value = artboard.get(field)
+            if not isinstance(value, int) or isinstance(value, bool):
+                findings.append(f"canvas.json: artboard missing field {field}")
+
+
+def check_artboards(mockups_dir, findings):
+    for path in sorted(mockups_dir.glob("*.dc.html")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            findings.append(f"{path.name}: cannot read file")
+            continue
+        if not text.lstrip().lower().startswith("<!doctype html>"):
+            findings.append(f"{path.name}: must be a plain <!doctype html> document")
+        for artifact in ARTBOARD_BANNED:
+            if artifact in text:
+                findings.append(f'{path.name}: contains forbidden artifact "{artifact}"')
+
+
+def artboard_refs(text):
+    """src/href attribute values of <script> and <link> tags in an artboard."""
+    refs = []
+    for rx in REF_RES:
+        refs.extend(rx.findall(text))
+    return refs
+
+
+def check_vendor(mockups_dir, manifest, findings):
+    """External URLs and dangling vendor/ paths fail; every manifest kit pin
+    must have vendor/<kit>/<version>/ on disk."""
+    for path in sorted(mockups_dir.glob("*.dc.html")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue  # unreadable file is already reported by check_artboards
+        for url in artboard_refs(text):
+            if re.match(r"^https?://", url):
+                findings.append(f"{path.name}: external URL {url} (zero-network invariant)")
+            elif url.startswith("vendor/") and not (mockups_dir / url).exists():
+                findings.append(f"{path.name}: missing vendor asset {url}")
+    mockups = manifest.get("mockups") if isinstance(manifest, dict) else None
+    if isinstance(mockups, dict):
+        for key, entry in sorted(mockups.items()):
+            if not isinstance(entry, dict):
+                continue
+            kit, version = entry.get("kit"), entry.get("kit_version")
+            if kit and version and not (mockups_dir / "vendor" / str(kit) / str(version)).is_dir():
+                findings.append(
+                    f"mockups.json: {key} pins kit_version {version} but vendor/{kit}/{version}/ is absent"
+                )
+
+
+def check_orphans(mockups_dir, manifest, warnings):
+    """Artboard files without a manifest entry are warnings, never findings."""
+    referenced = set()
+    mockups = manifest.get("mockups") if isinstance(manifest, dict) else None
+    if isinstance(mockups, dict):
+        for entry in mockups.values():
+            if isinstance(entry, dict) and isinstance(entry.get("artboard"), str):
+                referenced.add(f"{entry['artboard']}.dc.html")
+    for path in sorted(mockups_dir.glob("*.dc.html")):
+        if path.name not in referenced:
+            warnings.append(f"mockups/{path.name}: no manifest entry (orphan artboard)")
+
+
+def parse_map(map_path, findings):
+    """Return the screen keys of the MAP's 7-column screen tables.
+
+    Section headers and non-screen rows are skipped; a row that looks like a
+    screen (`| screen:...`) but does not have exactly 7 cells is reported with
+    its line number.
+    """
+    keys = []
+    try:
+        lines = Path(map_path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        findings.append(f"MAP.md: cannot read {map_path}")
+        return keys
+    for lineno, raw in enumerate(lines, 1):
+        row = raw.strip()
+        if not re.match(r"^\|\s*screen:", row):
+            continue
+        cells = [cell.strip() for cell in row.strip("|").split("|")]
+        if len(cells) != 7:
+            findings.append(f"MAP.md:{lineno}: cannot parse row")
+            continue
+        keys.append(cells[0])
+    return keys
+
+
+def check_coverage(screen_keys, manifest, mockups_dir, findings):
+    """Every MAP screen key needs a manifest entry or a none marker, and every
+    manifest entry needs its artboard file on disk."""
+    none_list = manifest.get("none", [])
+    covered = set(none_list) if isinstance(none_list, list) else set()
+    mockups = manifest.get("mockups")
+    if isinstance(mockups, dict):
+        for key, entry in sorted(mockups.items()):
+            if not isinstance(entry, dict):
+                continue
+            if isinstance(entry.get("screen"), str) and entry["screen"]:
+                covered.add(entry["screen"])
+            artboard = entry.get("artboard")
+            if isinstance(artboard, str) and artboard:
+                name = f"{artboard}.dc.html"
+                if not (mockups_dir / name).exists():
+                    findings.append(f"mockups.json: {key} references missing artboard file {name}")
+    for key in screen_keys:
+        if key not in covered:
+            findings.append(f"MAP.md: {key} has neither a mockup nor a none marker")
+
+
+def main(argv):
+    mockups_dir = None
+    map_path = None
+    args = list(argv)
+    while args:
+        arg = args.pop(0)
+        if arg == "--map" and args:
+            map_path = args.pop(0)
+        elif arg.startswith("--map="):
+            map_path = arg.split("=", 1)[1]
+        elif mockups_dir is None:
+            mockups_dir = arg
+        else:
+            print(USAGE, file=sys.stderr)
+            return 2
+    if mockups_dir is None or map_path is None:
+        print(USAGE, file=sys.stderr)
+        return 2
+
+    mockups_dir = Path(mockups_dir)
+    findings = []
+    manifest = load_json(mockups_dir / "mockups.json", findings)
+    canvas = load_json(mockups_dir / "canvas.json", findings)
+    if isinstance(manifest, dict):
+        check_manifest_schema(manifest, findings)
+    if isinstance(canvas, dict):
+        check_canvas_schema(canvas, findings)
+    check_artboards(mockups_dir, findings)
+    # MAP parse findings surface even when the manifest itself is broken.
+    coverage_findings = []
+    screen_keys = parse_map(map_path, coverage_findings)
+    if isinstance(manifest, dict):
+        check_coverage(screen_keys, manifest, mockups_dir, coverage_findings)
+    # Task 3: vendor findings fail; orphan artboards only warn.
+    vendor_findings = []
+    orphan_warnings = []
+    check_vendor(mockups_dir, manifest, vendor_findings)
+    check_orphans(mockups_dir, manifest, orphan_warnings)
+    findings += coverage_findings + vendor_findings
+
+    for finding in findings:
+        print(finding, file=sys.stderr)
+    for warning in orphan_warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    return 1 if findings else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

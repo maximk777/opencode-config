@@ -1,0 +1,7 @@
+{
+  "name": "plain-tokens",
+  "version": "1.0.0",
+  "vendor": [
+    {"path": "vendor/tokens.css", "url": "local:authored", "sha256": "8f7b453328c3520da9ea8b9c2b5e4658305d321ef841bbef7e89d38726a41255"}
+  ]
+}

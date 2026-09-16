@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -138,4 +138,29 @@ test("generated Claude agents carry the gate sync and Memory line wording", () =
   assert.ok(agents.architect.includes(ARCH_GATES));
   assert.ok(agents.architect.includes(MEMORY));
   assert.ok(agents.explorer.includes(EXPLORER_MEMORY));
+});
+
+test("ui-designer is a visible smart subagent locked to mockups and designer scripts", () => {
+  const a = A["ui-designer"];
+  assert.equal(a.mode, "subagent");
+  assert.notEqual(a.hidden, true);
+  // {file:...} refs must name the tier and the prompt file from the brief
+  const model = a.model.match(/^\{file:\.\/(.+)\}$/) || [];
+  assert.equal(model[1], "tiers/smart");
+  assert.ok(existsSync(`${ROOT}tiers/smart`));
+  const promptRef = a.prompt.match(/^\{file:\.\/(.+)\}$/) || [];
+  assert.equal(promptRef[1], "prompts/ui-designer.md");
+  assert.ok(existsSync(`${ROOT}prompts/ui-designer.md`));
+  // every allow rule for edit names the mockups directory, everything else is denied
+  const editAllow = Object.entries(a.permission.edit).filter(([, v]) => v === "allow").map(([k]) => k);
+  assert.ok(editAllow.length > 0, "ui-designer has no edit allow rule");
+  for (const pat of editAllow) assert.ok(pat.includes("mockups/"), pat);
+  assert.equal(a.permission.edit["*"], "deny");
+  // every allow rule for bash names the designer scripts, everything else is denied
+  const bashAllow = Object.entries(a.permission.bash).filter(([, v]) => v === "allow").map(([k]) => k);
+  assert.ok(bashAllow.length > 0, "ui-designer has no bash allow rule");
+  for (const pat of bashAllow) assert.ok(pat.includes("bin/designer-"), pat);
+  assert.equal(a.permission.bash["*"], "deny");
+  assert.ok(prompt("ui-designer").includes("Never edit generated files"));
+  assert.ok(prompt("ui-designer").includes("Zero-network artboards"));
 });

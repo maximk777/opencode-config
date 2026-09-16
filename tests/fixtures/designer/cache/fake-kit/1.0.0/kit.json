@@ -1,0 +1,7 @@
+{
+  "name": "fake-kit",
+  "version": "1.0.0",
+  "vendor": [
+    {"path": "vendor/app.css", "url": "file://__FIXTURE__/fake-kit/1.0.0/vendor-src/app.css", "sha256": "fe992f15489490c7bc8cee062d64de975c22c75c3c93524fe997993b4f720c8c"}
+  ]
+}

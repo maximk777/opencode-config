@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""Serve a mockups directory locally and open the gallery."""
+import argparse
+import http.server
+import socket
+import sys
+import webbrowser
+from functools import partial
+from pathlib import Path
+
+
+def pick_free_port():
+    # bind to 0 to learn a free port, close, then reuse: tiny race, fine for local viewing
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+class Server(http.server.ThreadingHTTPServer):
+    # since 3.14 ThreadingHTTPServer is daemonic, so server_close would not wait
+    # for in-flight responses; non-daemon keeps the --once exit and Ctrl-C correct
+    daemon_threads = False
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Serve a mockups directory locally and open the gallery.")
+    parser.add_argument("dir", help="mockups directory containing a generated index.html")
+    parser.add_argument("--no-open", action="store_true", help="do not open the browser (CI)")
+    parser.add_argument("--port-file", help="write the gallery URL to this file before serving")
+    # serve one request then exit 0; testability hook, default behavior serves until interrupted
+    parser.add_argument("--once", action="store_true", help=argparse.SUPPRESS)
+    args = parser.parse_args(argv)
+
+    root = Path(args.dir)
+    if not root.is_dir():
+        parser.error(f"not a directory: {root}")
+
+    port = pick_free_port()
+    url = f"http://127.0.0.1:{port}/index.html"
+    if args.port_file:
+        Path(args.port_file).write_text(url + "\n")
+    print(f"designer: {url}", flush=True)
+
+    handler = partial(http.server.SimpleHTTPRequestHandler, directory=str(root))
+    # bind before opening the browser so the first page load cannot hit a closed port
+    httpd = Server(("127.0.0.1", port), handler)
+
+    if not args.no_open:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass  # headless environments have no browser; the printed URL still works
+
+    if args.once:
+        httpd.handle_request()
+    else:
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            pass
+    httpd.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

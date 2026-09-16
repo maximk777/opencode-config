@@ -1,0 +1,8 @@
+{
+  "name": "tailwind-daisyui",
+  "version": "4.12.24",
+  "vendor": [
+    {"path": "vendor/tailwind.js", "url": "https://cdn.tailwindcss.com/3.4.16", "sha256": "3f81aa7f6ecdb1acc14c202e513dfee00b6c7703cd81ce1be25bf5215a92e8cb"},
+    {"path": "vendor/daisyui-full.min.css", "url": "https://cdn.jsdelivr.net/npm/daisyui@4.12.24/dist/full.min.css", "sha256": "85ab76db67c89f094af6170e05109bdcfc3642f2d7c4bd5a62e931d6aede4792"}
+  ]
+}
