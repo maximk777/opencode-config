@@ -166,10 +166,6 @@
         },
         "bash": {
           "*": "allow",
-          "git commit*": "ask",
-          "git * commit*": "ask",
-          "git push*": "ask",
-          "git * push*": "ask",
           "env": "deny",
           "printenv*": "deny",
           "set": "deny",

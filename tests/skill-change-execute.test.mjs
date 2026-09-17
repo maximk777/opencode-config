@@ -10,7 +10,7 @@ checkSkill("change-execute", [
   "On acceptance run git add -- <task files> and check the task in tasks.md.",
   "Accept a task only when the last Verdict line in its report is Verdict: COMPLIANT; if the report has no verdict, dispatch task-reviewer again.",
   "Archive before proposing commits.",
-  "Never commit in the work repository unless the user asks; at the end propose commits using the commit-message skill.",
+  "Never commit in the work repository on your own initiative; at the end propose commits using the commit-message skill, and once the user accepts them, commit and push without asking again.",
   "On resume run ~/.config/opencode/bin/change-state ~/specs/<project> <slug> and continue from its output.",
   "When execution shows the spec is wrong, stop the wave and switch to the change-spec skill.",
   "After the last wave run the full verification, request a final review of the whole change, then run openspec archive <slug> --yes from ~/specs/<project>.",

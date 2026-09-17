@@ -2,11 +2,13 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { tool } from "@opencode-ai/plugin";
-import { isScopedAgent, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, sumTokens, compactionDecision } from "../lib/session-reset-core.mjs";
+import { isScopedAgent, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, sumTokens, compactionDecision, continueDecision, continueMessage } from "../lib/session-reset-core.mjs";
 
 const TOKEN_BUDGET = 1500;
 const OV = "http://127.0.0.1:1933";
 const agentBySession = new Map();
+const pendingContinue = new Map();
+const lastContinueAt = new Map();
 
 // The key file works when OpenCode is started outside an interactive shell, where the env variable is missing.
 const ovHeaders = async () => {
@@ -64,6 +66,31 @@ export const SessionReset = async ({ client, $ }) => {
     }
   };
 
+  // A compaction is not a gate: when a scoped session goes idle right after compacting, send the
+  // continuation ourselves. Idle means no loop is running, so the prompt cannot race the session.
+  const continueAfterCompaction = async (sessionID) => {
+    if (!sessionID || !pendingContinue.has(sessionID)) return;
+    const markedAt = pendingContinue.get(sessionID);
+    pendingContinue.delete(sessionID);
+    const agent = await agentFor(sessionID);
+    if (!isScopedAgent(agent)) return;
+    const now = Date.now();
+    if (!continueDecision({ markedAt, now, lastContinue: lastContinueAt.get(sessionID) }).send) return;
+    lastContinueAt.set(sessionID, now);
+    const ref = await changeRef(sessionID);
+    const ok = await client.session
+      .promptAsync({ path: { id: sessionID }, body: { agent, parts: [{ type: "text", text: continueMessage(ref) }] } })
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!ok) {
+      await client.app
+        ?.log?.({ body: { service: "session-reset", level: "warn", message: `auto-continue failed for ${sessionID}` } })
+        ?.catch?.(() => {});
+    }
+  };
+
   return {
     "chat.message": async (input) => {
       if (input.agent) agentBySession.set(input.sessionID, input.agent);
@@ -78,10 +105,13 @@ export const SessionReset = async ({ client, $ }) => {
     },
 
     event: async ({ event }) => {
+      if (event.type === "session.idle") return continueAfterCompaction(event.properties?.sessionID);
       if (event.type !== "session.compacted") return;
       const sessionID = event.properties?.sessionID;
       const agent = await agentFor(sessionID);
       if (!isScopedAgent(agent)) return;
+      // Mark before the summary save: a missing summary must not drop the continuation.
+      pendingContinue.set(sessionID, Date.now());
       const msgs = await client.session.messages({ path: { id: sessionID } }).catch(() => null);
       const last = [...(msgs?.data ?? [])].reverse().find((m) => m.info?.summary);
       const summary = last?.parts?.map((p) => p.text ?? "").join("\n").trim();
@@ -121,7 +151,7 @@ export const SessionReset = async ({ client, $ }) => {
           if (!model) return `phase_reset: ${tier.pathname} does not name a provider/model`;
           // Awaiting summarize here deadlocks: it waits for the session to go idle, and the session is busy running this tool.
           client.session.summarize({ path: { id: ctx.sessionID }, body: model }).catch(() => {});
-          return "compaction scheduled: finish this turn now; the next turn starts from the compacted summary and the change files";
+          return "compaction scheduled: finish this turn now; after compaction the session continues automatically";
         },
       }),
     },

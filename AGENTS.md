@@ -29,7 +29,7 @@ Pass long texts through the humanize skill. This covers ADRs, proposals, designs
 ## Shell
 
 Read files with the read, grep and glob tools. Bash commands run without approval; env, printenv, .env files and `opencode debug` stay denied.
-Commits and pushes stay guarded: the orchestrator asks, every other custom agent is denied, except setup-improver which may commit the setup repository.
+Commits and pushes need no approval: the orchestrator and setup-improver commit and push themselves; every other custom agent is denied.
 Use `cd <dir> && git <command>` instead of git -C.
 
 ## Verification

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isScopedAgent, renderState, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, openspecSummary, COMPACT_SHARE, sumTokens, compactionDecision } from "../lib/session-reset-core.mjs";
+import { isScopedAgent, renderState, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, openspecSummary, COMPACT_SHARE, sumTokens, compactionDecision, continueDecision, continueMessage, CONTINUE_TTL_MS, CONTINUE_COOLDOWN_MS } from "../lib/session-reset-core.mjs";
 
 const state = { slug: "add-ping", tasks_open: ["1.2", "1.3"], awaiting_review: ["1.2"], current_wave: 2 };
 
@@ -41,7 +41,7 @@ test("openspec status is shortened to completion and artifact states", () => {
 
 test("facts are cut to the token budget", () => {
   const ctx = buildCompactionContext({ agent: "orchestrator", state, facts: ["a".repeat(10000)], tokenBudget: 100 });
-  assert.ok(ctx.join("").length <= renderState(state).length + 400 + 50);
+  assert.ok(ctx.join("").length <= renderState(state).length + 400 + 200);
 });
 
 test("only the summary is sent", () => {
@@ -54,13 +54,15 @@ test("openviking failure falls back to files", async () => {
   assert.deepEqual(r.facts, []);
   assert.match(r.warning, /ECONNREFUSED/);
   const ctx = buildCompactionContext({ agent: "orchestrator", state, facts: r.facts, tokenBudget: 500 });
-  assert.equal(ctx.length, 1);
+  assert.equal(ctx.length, 2);
+  assert.match(ctx.at(-1), /'Next' section/);
 });
 
 test("missing state keeps facts only", () => {
   const ctx = buildCompactionContext({ agent: "architect", state: null, facts: ["fact one"], tokenBudget: 500 });
-  assert.equal(ctx.length, 1);
+  assert.equal(ctx.length, 2);
   assert.match(ctx[0], /fact one/);
+  assert.match(ctx.at(-1), /'Next' section/);
 });
 
 test("tier file becomes provider and model ids", () => {
@@ -173,7 +175,8 @@ test("change-state failure is logged as a warning without stderr", async () => {
     await hooks["chat.message"]({ agent: "orchestrator", sessionID: "s2" });
     const output = { context: [] };
     await hooks["experimental.session.compacting"]({ sessionID: "s2" }, output);
-    assert.deepEqual(output.context, []);
+    assert.equal(output.context.length, 1);
+    assert.match(output.context[0], /'Next' section/);
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -184,4 +187,69 @@ test("compaction state lists tasks to fix and to accept", () => {
   const text = renderState({ slug: "x", tasks_done: [], tasks_open: ["1.1", "1.2"], awaiting_review: [], needs_fix: ["1.1"], ready_to_accept: ["1.2"], current_wave: 1 });
   assert.ok(text.includes("Needs fix: 1.1"));
   assert.ok(text.includes("Ready to accept: 1.2"));
+});
+
+test("continueDecision honors ttl and cooldown", () => {
+  assert.equal(continueDecision({ markedAt: null, now: 1000 }).send, false);
+  assert.equal(continueDecision({ markedAt: 1000, now: 1000 + CONTINUE_TTL_MS, lastContinue: null }).send, true);
+  assert.equal(continueDecision({ markedAt: 1000, now: 1000 + CONTINUE_TTL_MS + 1, lastContinue: null }).send, false);
+  assert.equal(continueDecision({ markedAt: 1000, now: 2000, lastContinue: 1500 }).send, false);
+  assert.equal(continueDecision({ markedAt: 1000, now: 2000, lastContinue: 2000 - CONTINUE_COOLDOWN_MS }).send, true);
+});
+
+test("continueMessage names the change or stays generic", () => {
+  assert.match(continueMessage("p/add-ping"), /Continue change p\/add-ping now/);
+  assert.match(continueMessage("p/add-ping"), /change-state ~\/specs\/p add-ping/);
+  assert.match(continueMessage("p/add-ping"), /not a gate/);
+  assert.match(continueMessage(null), /Continue your current work from the files/);
+});
+
+test("an idle scoped session right after compaction is continued automatically", async () => {
+  const { SessionReset } = await import("../plugins/session-reset.mjs");
+  const sent = [];
+  const client = {
+    session: {
+      get: async () => ({ data: { title: "t [change:p/x]" } }),
+      messages: async () => ({ data: [] }),
+      summarize: async () => {},
+      promptAsync: async (req) => {
+        sent.push(req);
+        return true;
+      },
+    },
+    config: { providers: async () => ({ data: { providers: [] } }) },
+  };
+  const hooks = await SessionReset({ client, $: null });
+  await hooks["chat.message"]({ agent: "orchestrator", sessionID: "s1" });
+  await hooks.event({ event: { type: "session.compacted", properties: { sessionID: "s1" } } });
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].path.id, "s1");
+  assert.equal(sent[0].body.agent, "orchestrator");
+  assert.match(sent[0].body.parts[0].text, /Continue change p\/x now/);
+  await hooks.event({ event: { type: "session.compacted", properties: { sessionID: "s1" } } });
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+  assert.equal(sent.length, 1);
+});
+
+test("compaction of a non-scoped agent is never continued", async () => {
+  const { SessionReset } = await import("../plugins/session-reset.mjs");
+  const sent = [];
+  const client = {
+    session: {
+      get: async () => ({ data: { title: "t" } }),
+      messages: async () => ({ data: [] }),
+      summarize: async () => {},
+      promptAsync: async (req) => {
+        sent.push(req);
+        return true;
+      },
+    },
+    config: { providers: async () => ({ data: { providers: [] } }) },
+  };
+  const hooks = await SessionReset({ client, $: null });
+  await hooks["chat.message"]({ agent: "executor", sessionID: "s2" });
+  await hooks.event({ event: { type: "session.compacted", properties: { sessionID: "s2" } } });
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s2" } } });
+  assert.equal(sent.length, 0);
 });

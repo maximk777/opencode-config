@@ -47,7 +47,7 @@ Where phase_reset is not available, as in Claude Code, do not wait for a reset: 
 Accept a task only when the last Verdict line in its report is Verdict: COMPLIANT; if the report has no verdict, dispatch task-reviewer again.
 On acceptance run git add -- <task files> and check the task in tasks.md.
 When a wave is accepted, run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once.
-Never commit in the work repository unless the user asks; at the end propose commits using the commit-message skill.
+Never commit in the work repository on your own initiative; at the end propose commits using the commit-message skill, and once the user accepts them, commit and push without asking again.
 If an executor touched a file outside its list, the reviewer flags it; revert that file only with the user's consent.
 
 ## Spec errors

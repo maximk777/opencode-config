@@ -23,14 +23,15 @@ test("executors and reviewer are hidden subagents with the right tiers", () => {
   assert.equal(A["task-reviewer"].model, "{file:./tiers/smart}");
 });
 
-test("executors cannot commit and the orchestrator commits only on approval", () => {
-  assert.equal(A.orchestrator.permission.bash["git commit*"], "ask");
+test("executors cannot commit and the orchestrator commits without approval", () => {
+  assert.equal(A.orchestrator.permission.bash["git commit*"], undefined);
+  assert.equal(A.orchestrator.permission.bash["*"], "allow");
   for (const n of ["executor", "executor-strong"]) {
     assert.equal(A[n].permission.bash["git commit*"], "deny", n);
   }
   const orchestratorPrompt = prompt("orchestrator");
-  assert.ok(orchestratorPrompt.includes("Never commit in the work repository unless the user asks; git commit and git push ask for approval."));
-  assert.ok(!orchestratorPrompt.includes("Never commit in the work repository. Commit only"));
+  assert.ok(orchestratorPrompt.includes("git commit and git push need no approval."));
+  assert.ok(!orchestratorPrompt.includes("ask for approval"));
 });
 
 test("orchestrator edits only specs and dispatches only the flow subagents", () => {
