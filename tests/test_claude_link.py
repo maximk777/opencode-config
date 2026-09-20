@@ -26,7 +26,7 @@ class ClaudeLink(unittest.TestCase):
         self.assertTrue((self.home / "skills" / "change-execute" / "SKILL.md").exists())
         agent = (self.home / "agents" / "task-reviewer.md").read_text()
         self.assertIn("name: task-reviewer", agent)
-        self.assertIn("model: opus", agent)
+        self.assertIn("model: sonnet", agent)
         self.assertIn("tools: Read, Grep, Glob, Bash, Edit", agent)
         self.assertIn("You are task-reviewer.", agent)
         self.assertIn("model: sonnet", (self.home / "agents" / "executor.md").read_text())

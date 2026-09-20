@@ -26,10 +26,10 @@ test("gates template header is exact", () => {
   assert.ok(t.includes("## Reassessment"));
 });
 
-test("harness-builder is primary on smart and cannot commit", () => {
+test("harness-builder is primary on fast and cannot commit", () => {
   const a = JSON.parse(readFileSync(`${ROOT}opencode.json`, "utf8")).agent["harness-builder"];
   assert.equal(a.mode, "primary");
-  assert.equal(a.model, "{file:./tiers/smart}");
+  assert.equal(a.model, "{file:./tiers/fast}");
   assert.equal(a.permission.bash["git commit*"], "deny");
   assert.deepEqual(a.permission.task, { "*": "deny", explorer: "allow" });
 });

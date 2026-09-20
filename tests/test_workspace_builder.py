@@ -59,9 +59,9 @@ class WorkspaceBuilderAgent(unittest.TestCase):
         for value in values:
             self.assertEqual(decide(self.cfg, "workspace-builder", permission, value), action, f"{permission}: {value}")
 
-    def test_entry_is_primary_smart_with_prompt(self):
+    def test_entry_is_primary_fast_with_prompt(self):
         self.assertEqual(self.agent["mode"], "primary")
-        self.assertEqual(self.agent["model"], "{file:./tiers/smart}")
+        self.assertEqual(self.agent["model"], "{file:./tiers/fast}")
         self.assertEqual(self.agent["prompt"], "{file:./prompts/workspace-builder.md}")
 
     def test_task_allows_only_explorer(self):

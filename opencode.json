@@ -128,7 +128,7 @@
     "ui-designer": {
       "mode": "subagent",
       "description": "Renders and validates screen mockups from a MAP spec using style kits",
-      "model": "{file:./tiers/smart}",
+      "model": "{file:./tiers/fast}",
       "prompt": "{file:./prompts/ui-designer.md}",
       "steps": 60,
       "permission": {
@@ -210,7 +210,7 @@
       "mode": "subagent",
       "hidden": true,
       "description": "Implements one prose-described or escalated task from a brief file",
-      "model": "{file:./tiers/smart}",
+      "model": "{file:./tiers/fast}",
       "prompt": "{file:./prompts/executor-strong.md}",
       "steps": 60,
       "permission": {
@@ -238,7 +238,7 @@
       "mode": "subagent",
       "hidden": true,
       "description": "Reviews one task: spec verdict first, quality only when compliant",
-      "model": "{file:./tiers/smart}",
+      "model": "{file:./tiers/fast}",
       "prompt": "{file:./prompts/task-reviewer.md}",
       "steps": 30,
       "permission": {
@@ -302,7 +302,7 @@
     "harness-builder": {
       "mode": "primary",
       "description": "Measures a service's error background and designs evidence-backed quality gates",
-      "model": "{file:./tiers/smart}",
+      "model": "{file:./tiers/fast}",
       "prompt": "{file:./prompts/harness-builder.md}",
       "permission": {
         "edit": {
@@ -332,7 +332,7 @@
     "instrumentation": {
       "mode": "primary",
       "description": "Builds and audits project agent instrumentation: AGENTS.md, .agents rules, skills and agents",
-      "model": "{file:./tiers/smart}",
+      "model": "{file:./tiers/fast}",
       "prompt": "{file:./prompts/instrumentation.md}",
       "permission": {
         "edit": {
@@ -364,7 +364,7 @@
     "workspace-builder": {
       "mode": "primary",
       "description": "Creates and extends team workspaces from the workspace kit",
-      "model": "{file:./tiers/smart}",
+      "model": "{file:./tiers/fast}",
       "prompt": "{file:./prompts/workspace-builder.md}",
       "permission": {
         "edit": {
@@ -402,7 +402,7 @@
     "setup-improver": {
       "mode": "primary",
       "description": "Audits and improves the global OpenCode setup: config drift, upstream sources, flow metrics",
-      "model": "{file:./tiers/smart}",
+      "model": "{file:./tiers/fast}",
       "prompt": "{file:./prompts/setup-improver.md}",
       "permission": {
         "edit": {

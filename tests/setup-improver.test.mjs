@@ -23,9 +23,9 @@ test("sources.lock pins at least five sources", () => {
   assert.ok(rows.length >= 5);
 });
 
-test("setup-improver is primary on smart", () => {
+test("setup-improver is primary on fast", () => {
   const a = JSON.parse(readFileSync(`${ROOT}opencode.json`, "utf8")).agent["setup-improver"];
   assert.equal(a.mode, "primary");
-  assert.equal(a.model, "{file:./tiers/smart}");
+  assert.equal(a.model, "{file:./tiers/fast}");
   assert.deepEqual(a.permission.task, { "*": "deny", explorer: "allow" });
 });

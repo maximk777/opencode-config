@@ -19,8 +19,8 @@ test("executors and reviewer are hidden subagents with the right tiers", () => {
     assert.equal(A[n].hidden, true, n);
   }
   assert.equal(A.executor.model, "{file:./tiers/fast}");
-  assert.equal(A["executor-strong"].model, "{file:./tiers/smart}");
-  assert.equal(A["task-reviewer"].model, "{file:./tiers/smart}");
+  assert.equal(A["executor-strong"].model, "{file:./tiers/fast}");
+  assert.equal(A["task-reviewer"].model, "{file:./tiers/fast}");
 });
 
 test("executors cannot commit and the orchestrator commits without approval", () => {
@@ -141,14 +141,14 @@ test("generated Claude agents carry the gate sync and Memory line wording", () =
   assert.ok(agents.explorer.includes(EXPLORER_MEMORY));
 });
 
-test("ui-designer is a visible smart subagent locked to mockups and designer scripts", () => {
+test("ui-designer is a visible fast subagent locked to mockups and designer scripts", () => {
   const a = A["ui-designer"];
   assert.equal(a.mode, "subagent");
   assert.notEqual(a.hidden, true);
   // {file:...} refs must name the tier and the prompt file from the brief
   const model = a.model.match(/^\{file:\.\/(.+)\}$/) || [];
-  assert.equal(model[1], "tiers/smart");
-  assert.ok(existsSync(`${ROOT}tiers/smart`));
+  assert.equal(model[1], "tiers/fast");
+  assert.ok(existsSync(`${ROOT}tiers/fast`));
   const promptRef = a.prompt.match(/^\{file:\.\/(.+)\}$/) || [];
   assert.equal(promptRef[1], "prompts/ui-designer.md");
   assert.ok(existsSync(`${ROOT}prompts/ui-designer.md`));

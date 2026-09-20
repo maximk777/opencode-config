@@ -32,11 +32,11 @@ flowchart LR
   subgraph OpenCode["OpenCode (~/.config/opencode, git)"]
     AR[architect<br/>smart]
     OR[orchestrator<br/>smart]
-    HB[harness-builder<br/>smart]
-    IN[instrumentation<br/>smart]
-    SI[setup-improver<br/>smart]
-    EX[executor<br/>fast / smart]
-    RV[task-reviewer<br/>smart]
+    HB[harness-builder<br/>fast]
+    IN[instrumentation<br/>fast]
+    SI[setup-improver<br/>fast]
+    EX[executor<br/>fast]
+    RV[task-reviewer<br/>fast]
     XP[explorer<br/>fast]
   end
   subgraph Files
@@ -97,13 +97,13 @@ flowchart LR
 | `architect` | primary | smart | explorer | `~/specs/<p>/architecture/**` включая `poc/`; временный worktree для PoC | система целиком: ADR, C4 и sequence в Mermaid, версии, роадмап, бэклог кандидатов, proof of concept с цифрами |
 | `orchestrator` | primary | smart | executor, executor-strong, task-reviewer, explorer | `~/specs/<p>/openspec/**` | одно изменение от брейншторма до архива |
 | `executor` | subagent, hidden | fast | — | рабочая репа, файлы из брифа | задача с готовым каркасом кода или на 1–2 файла |
-| `executor-strong` | subagent, hidden | smart | — | рабочая репа, файлы из брифа | задача по текстовому описанию; эскалация после 3 неудачных раундов |
-| `task-reviewer` | subagent, hidden | smart | — | ничего | ревью задачи: два вердикта |
+| `executor-strong` | subagent, hidden | fast | — | рабочая репа, файлы из брифа | задача по текстовому описанию; эскалация после 3 неудачных раундов |
+| `task-reviewer` | subagent, hidden | fast | — | ничего | ревью задачи: два вердикта |
 | `explorer` | subagent | fast | — | ничего | чтение и поиск по коду |
-| `harness-builder` | primary | smart | explorer | `~/specs/<p>/harness/**`, временный worktree с пробами | фон ошибок и ворота |
-| `instrumentation` | primary | smart | explorer | `AGENTS.md`, `.agents/**` и симлинки `.opencode/{agents,skills}` проекта | специализированные под проект правила, скиллы и агенты |
-| `workspace-builder` | primary | smart | explorer | файлы целевого workspace | создание и расширение командных workspace через скиллы `workspace-create` и `workspace-extend` |
-| `setup-improver` | primary | smart | explorer | `~/.config/opencode/**` | улучшение самого сетапа |
+| `harness-builder` | primary | fast | explorer | `~/specs/<p>/harness/**`, временный worktree с пробами | фон ошибок и ворота |
+| `instrumentation` | primary | fast | explorer | `AGENTS.md`, `.agents/**` и симлинки `.opencode/{agents,skills}` проекта | специализированные под проект правила, скиллы и агенты |
+| `workspace-builder` | primary | fast | explorer | файлы целевого workspace | создание и расширение командных workspace через скиллы `workspace-create` и `workspace-extend` |
+| `setup-improver` | primary | fast | explorer | `~/.config/opencode/**` | улучшение самого сетапа |
 
 Встроенные `build` и `plan` OpenCode остаются для обычной работы вне процессов.
 
@@ -463,7 +463,7 @@ Tier-файлы — единственное место назначения м�
 
 Кит командного workspace лежит в `kits/workspace/`. Это дерево повторяет созданный workspace файл в файл. `kits/workspace/kit.json` хранит `name`, `version` и `templated`; версия кита записывается в каждый созданный workspace.
 
-`bin/workspace-kit create` копирует кит в целевую папку и подставляет значения в шаблонные файлы из `templated`. Агент `workspace-builder` (primary, smart) создаёт и расширяет workspace через скиллы `workspace-create` и `workspace-extend` и правит только файлы целевого workspace.
+`bin/workspace-kit create` копирует кит в целевую папку и подставляет значения в шаблонные файлы из `templated`. Агент `workspace-builder` (primary, fast) создаёт и расширяет workspace через скиллы `workspace-create` и `workspace-extend` и правит только файлы целевого workspace.
 
 В workspace есть `AGENTS.md`, `.agents/` с ролями, правилами, скиллами и шаблонами, сгенерированные переходники под харнесы, `tools/check.py` и `tools/generate.py` и личный слой `.local/`. Скрипты работают на стандартной библиотеке Python 3.9 без зависимостей.
 
