@@ -416,7 +416,6 @@
         "bash": {
           "*": "allow",
           "git * commit*": "deny",
-          "git push*": "deny",
           "git * push*": "deny",
           "env": "deny",
           "printenv*": "deny",

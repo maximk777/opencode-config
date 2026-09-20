@@ -109,8 +109,8 @@ test("the orchestrator and setup-improver commit without asking, never through g
     expectAll(a, "bash", "deny", ["git commit -m x", "git -C /w commit -m x", "git -c a=b commit", "git push", "git -C /w push"]);
   }
   expectAll("orchestrator", "bash", "allow", ["git commit -m x", "git -C /w commit -m x", "git -c a=b commit", "git push", "git -C /w push"]);
-  expectAll("setup-improver", "bash", "allow", ["git add prompts/x.md", "git commit -m 'fix(x): y'"]);
-  expectAll("setup-improver", "bash", "deny", ["git -C /w commit -m x", "git push"]);
+  expectAll("setup-improver", "bash", "allow", ["git add prompts/x.md", "git commit -m 'fix(x): y'", "git push"]);
+  expectAll("setup-improver", "bash", "deny", ["git -C /w commit -m x", "git -C /w push"]);
 });
 
 test("flow scripts run without asking", () => {
