@@ -2,13 +2,15 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { tool } from "@opencode-ai/plugin";
-import { isScopedAgent, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, sumTokens, compactionDecision, continueDecision, continueMessage } from "../lib/session-reset-core.mjs";
+import { isScopedAgent, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, sumTokens, compactionDecision, continueDecision, continueMessage, artifactPayload, artifactDecision, fingerprint } from "../lib/session-reset-core.mjs";
 
 const TOKEN_BUDGET = 1500;
 const OV = "http://127.0.0.1:1933";
 const agentBySession = new Map();
 const pendingContinue = new Map();
 const lastContinueAt = new Map();
+const artifactAt = new Map();
+const artifactHash = new Map();
 
 // The key file works when OpenCode is started outside an interactive shell, where the env variable is missing.
 const ovHeaders = async () => {
@@ -91,6 +93,36 @@ export const SessionReset = async ({ client, $ }) => {
     }
   };
 
+  // Non-scoped sessions (build, executor, ...) leave a plain vectors-only artifact after a turn;
+  // scoped agents keep their compaction-time summary instead.
+  const saveIdleArtifact = async (sessionID) => {
+    if (!sessionID) return;
+    const agent = await agentFor(sessionID);
+    if (!agent || isScopedAgent(agent)) return;
+    const info = await client.session.get({ path: { id: sessionID } }).catch(() => null);
+    const msgs = await client.session.messages({ path: { id: sessionID } }).catch(() => null);
+    const payload = artifactPayload({ agent, title: info?.data?.title, messages: msgs?.data ?? [] });
+    if (!payload) return;
+    const hash = fingerprint(payload.text);
+    const d = artifactDecision({ now: Date.now(), lastWriteAt: artifactAt.get(sessionID), changed: artifactHash.get(sessionID) !== hash });
+    if (!d.write) return;
+    const headers = await ovHeaders();
+    const user = await ovUser(headers);
+    const res = user
+      ? await fetch(`${OV}/api/v1/content/write`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ uri: `viking://user/${user}/memories/sessions/${sessionID}.md`, content: payload.text, mode: "replace", processing_mode: "vectors_only" }),
+        }).catch(() => null)
+      : null;
+    if (!res?.ok) {
+      await client.app?.log?.({ body: { service: "session-reset", level: "warn", message: `session artifact not saved: ${user ? `write ${res?.status ?? "failed"}` : "OpenViking user unknown"}` } }).catch?.(() => {});
+      return;
+    }
+    artifactHash.set(sessionID, hash);
+    artifactAt.set(sessionID, Date.now());
+  };
+
   return {
     "chat.message": async (input) => {
       if (input.agent) agentBySession.set(input.sessionID, input.agent);
@@ -105,7 +137,10 @@ export const SessionReset = async ({ client, $ }) => {
     },
 
     event: async ({ event }) => {
-      if (event.type === "session.idle") return continueAfterCompaction(event.properties?.sessionID);
+      if (event.type === "session.idle") {
+        await continueAfterCompaction(event.properties?.sessionID);
+        return saveIdleArtifact(event.properties?.sessionID);
+      }
       if (event.type !== "session.compacted") return;
       const sessionID = event.properties?.sessionID;
       const agent = await agentFor(sessionID);
@@ -123,7 +158,7 @@ export const SessionReset = async ({ client, $ }) => {
         ? await fetch(`${OV}/api/v1/content/write`, {
             method: "POST",
             headers,
-            body: JSON.stringify({ uri: `viking://user/${user}/memories/sessions/${sessionID}.md`, content: payload.text, mode: "replace" }),
+            body: JSON.stringify({ uri: `viking://user/${user}/memories/sessions/${sessionID}.md`, content: payload.text, mode: "replace", processing_mode: "vectors_only" }),
           }).catch(() => null)
         : null;
       if (!res?.ok) {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isScopedAgent, renderState, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, openspecSummary, COMPACT_SHARE, sumTokens, compactionDecision, continueDecision, continueMessage, CONTINUE_TTL_MS, CONTINUE_COOLDOWN_MS } from "../lib/session-reset-core.mjs";
+import { isScopedAgent, renderState, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, openspecSummary, COMPACT_SHARE, sumTokens, compactionDecision, continueDecision, continueMessage, CONTINUE_TTL_MS, CONTINUE_COOLDOWN_MS, artifactPayload, artifactDecision, fingerprint, ARTIFACT_MIN_INTERVAL_MS } from "../lib/session-reset-core.mjs";
 
 const state = { slug: "add-ping", tasks_open: ["1.2", "1.3"], awaiting_review: ["1.2"], current_wave: 2 };
 
@@ -252,4 +252,91 @@ test("compaction of a non-scoped agent is never continued", async () => {
   await hooks.event({ event: { type: "session.compacted", properties: { sessionID: "s2" } } });
   await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s2" } } });
   assert.equal(sent.length, 0);
+});
+
+test("artifactPayload keeps capped turns and rejects sessions without assistant text", () => {
+  const messages = [
+    { role: "user", parts: [{ type: "text", text: "fix the login bug" }] },
+    { role: "assistant", parts: [{ type: "text", text: "x".repeat(5000) }] },
+  ];
+  const p = artifactPayload({ agent: "build", title: "Login bug", messages });
+  assert.equal(p.kind, "session-artifact");
+  assert.match(p.text, /^# Login bug/);
+  assert.match(p.text, /- agent: build/);
+  assert.match(p.text, /## user\n\nfix the login bug/);
+  assert.ok(p.text.length < 3000);
+  assert.equal(artifactPayload({ agent: "build", title: "t", messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }), null);
+});
+
+test("artifactDecision needs a change and honors the interval", () => {
+  assert.equal(artifactDecision({ now: 1000, lastWriteAt: null, changed: false }).write, false);
+  assert.equal(artifactDecision({ now: 1000, lastWriteAt: null, changed: true }).write, true);
+  assert.equal(artifactDecision({ now: 1000, lastWriteAt: 500, changed: true }).write, false);
+  assert.equal(artifactDecision({ now: 1000, lastWriteAt: 1000 - ARTIFACT_MIN_INTERVAL_MS, changed: true }).write, true);
+});
+
+test("fingerprint detects content changes", () => {
+  assert.equal(fingerprint("abc"), fingerprint("abc"));
+  assert.notEqual(fingerprint("abc"), fingerprint("abd"));
+});
+
+test("idle build session writes one vectors-only artifact", async () => {
+  const { SessionReset } = await import("../plugins/session-reset.mjs");
+  const writes = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/system/status")) return { ok: true, json: async () => ({ result: { user: "maxim" } }) };
+    writes.push({ url: String(url), body: JSON.parse(init.body) });
+    return { ok: true, json: async () => ({}) };
+  };
+  const client = {
+    session: {
+      get: async () => ({ data: { title: "T" } }),
+      messages: async () => ({ data: [{ role: "user", parts: [{ type: "text", text: "do work" }] }, { role: "assistant", parts: [{ type: "text", text: "done" }] }] }),
+      summarize: async () => {},
+      promptAsync: async () => true,
+    },
+    config: { providers: async () => ({ data: { providers: [] } }) },
+  };
+  try {
+    const hooks = await SessionReset({ client, $: null });
+    await hooks["chat.message"]({ agent: "build", sessionID: "s9" });
+    await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s9" } } });
+    await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s9" } } });
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].body.uri, "viking://user/maxim/memories/sessions/s9.md");
+    assert.equal(writes[0].body.mode, "replace");
+    assert.equal(writes[0].body.processing_mode, "vectors_only");
+    assert.match(writes[0].body.content, /## assistant\n\ndone/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("idle scoped sessions write no artifact", async () => {
+  const { SessionReset } = await import("../plugins/session-reset.mjs");
+  const writes = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/system/status")) return { ok: true, json: async () => ({ result: { user: "maxim" } }) };
+    writes.push(JSON.parse(init.body));
+    return { ok: true, json: async () => ({}) };
+  };
+  const client = {
+    session: {
+      get: async () => ({ data: { title: "T" } }),
+      messages: async () => ({ data: [{ role: "assistant", parts: [{ type: "text", text: "x" }] }] }),
+      summarize: async () => {},
+      promptAsync: async () => true,
+    },
+    config: { providers: async () => ({ data: { providers: [] } }) },
+  };
+  try {
+    const hooks = await SessionReset({ client, $: null });
+    await hooks["chat.message"]({ agent: "orchestrator", sessionID: "s10" });
+    await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s10" } } });
+    assert.equal(writes.length, 0);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
