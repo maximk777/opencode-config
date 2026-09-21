@@ -4,7 +4,7 @@ description: Use when the workspace-builder agent must create a new team workspa
 ---
 # Create a workspace
 
-Create a new team workspace from the kit, describe it with the owner, fill its roles, repositories and domains by the workspace's own skills, and leave every file uncommitted.
+Create a new team workspace from the kit, describe it with the owner, fill its trackers, first project, repositories and domains by the workspace's own skills, and leave every file uncommitted.
 
 ## Collect
 
@@ -17,13 +17,14 @@ Ask one question per message and wait for the answer before the next one.
 5. `id_pattern`: Python regular expression for tracker task ids, used with fullmatch, for example `(DEMO|SPPP)-\d+`.
 6. A real task id from the tracker. Check it against the pattern with `python3 -c 'import re, sys; print(bool(re.fullmatch(sys.argv[1], sys.argv[2])))' '<id_pattern>' '<id>'`. When it prints `False`, fix `id_pattern` with the owner and check again.
 7. `tracker_url`: task link with `{id}` in place of the id, for example `https://tracker.example/i/{id}`. It must contain `{id}`; `workspace-kit` rejects it otherwise.
+8. Every other tracker of the team, asked after the seed tracker of steps 5 to 7, each as `{key, id_pattern, url}`. Every `key` is a lowercase word, unique in the list; check every `id_pattern` and `url` the way steps 6 and 7 do. The seed tracker enters the list as the first entry with key `main`.
+9. The first project, optional: a project key of lowercase letters, digits and `-`, for example `abs`. When the owner names one, the workspace gets `projects/<key>/PROJECT.md` through its own skills in `## First project`.
 
 ## Create
 
 1. Run, with each value in single quotes:
    `~/.config/opencode/bin/workspace-kit create <target> --param workspace_name=... --param title=... --param forge=... --param id_pattern=... --param tracker_url=...`
 2. On exit 2, show the owner the message, fix the value together and rerun.
-3. Run `cd <target> && git init`.
 
 Run every command below in `<target>`.
 
@@ -31,15 +32,14 @@ Run every command below in `<target>`.
 
 1. Fill `README.md` with the owner. Keep the kit sections and add the team's specifics to them.
 2. Fill every section of `docs/ARCHITECTURE.md` with the owner.
-3. When the owner points to existing documents or code, send the `explorer` subagent to read them and bring back findings.
-4. Refer to repositories, domains, stands and decisions by keys (`repo:<name>`, `domain:<name>`, `stand:<name>`, `adr:NNNN`). Never write home paths or stand URLs.
-5. Pass the prose through the humanize skill before writing it.
+3. Fill `tracker/trackers.json` with the tracker list from Collect: one object per tracker with `key`, `id_pattern` and `url`, in this order, the `main` entry first. JSON doubles every backslash, so the pattern `(DEMO|SPPP)-\d+` is written `(DEMO|SPPP)-\\d+` in the file.
+4. When the owner points to existing documents or code, send the `explorer` subagent to read them and bring back findings.
+5. Refer to repositories, domains, stands and decisions by keys (`repo:<name>`, `domain:<name>`, `stand:<name>`, `adr:NNNN`). Never write home paths or stand URLs.
+6. Pass the prose through the humanize skill before writing it.
 
-## Roles
+## First project
 
-1. Show the owner the list from `ls .agents/roles/`.
-2. For each role the team does not have, ask the owner to confirm, then delete its file.
-3. For each missing role, follow the `role` kind of `.agents/skills/extend/SKILL.md`: steps 1 to 3, the `role` steps in `## Kinds`, then steps 6 and 7. Skip its branch, commit, rebase and push steps.
+When the owner named a first project in Collect, follow the `project` kind of `.agents/skills/extend/SKILL.md`: steps 1 to 3, the `project` steps in `## Kinds`, then steps 6 and 7 of that skill. Skip its branch, commit, rebase and push steps, and keep the key the owner gave: the result is `projects/<key>/PROJECT.md`. When the owner named no project, skip this section.
 
 ## Repositories and domains
 
@@ -50,7 +50,8 @@ Run every command below in `<target>`.
 
 1. Run `python3 tools/generate.py`, then `python3 tools/check.py`.
 2. Fix every finding and run both again until `check.py` prints nothing.
-3. Show the owner the final output of both commands.
+3. Run `git init`. The repository stays with no commits.
+4. Show the owner the final output of both commands.
 
 ## Hand-off
 
@@ -58,7 +59,9 @@ Report to the owner:
 - the path `<target>`;
 - the kit `name` and `version` from `.agents/kit.json`;
 - the parameters;
-- the roles, repositories and domains;
+- the trackers from `tracker/trackers.json`;
+- the first project and its key, when one was created;
+- the repositories and domains;
 - the final `check.py` output.
 
 Say that every file is uncommitted and the repository has no commits. Run `git status` and show its output. Then print the commands the owner runs.

@@ -131,7 +131,7 @@ def check_stage_gates(ctx) -> List[Finding]:
 
 
 def remaining(ctx) -> List[str]:
-    """Failures of the current stage's gates of every stream as `stream:<domain>/<stream> <stage> <gate>: path:line detail`."""
+    """Failures of the current stage's gates of every stream as `stream:<project>/<domain>/<stream> <stage> <gate>: path:line detail`."""
     ws = _evaluate(ctx)[0]
     lines: List[str] = []
     for stream in ws.streams:

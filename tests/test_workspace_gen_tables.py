@@ -12,7 +12,7 @@ import unittest
 from wslib import gen_tables
 
 REPOS_MD = "# Repos\n\nIntro\n<!-- repos:begin -->\nold\n<!-- repos:end -->\nTail\n"
-HEADER = "| Name | Forge | Default branch | Roles | Kit | Summary |\n|---|---|---|---|---|---|\n"
+HEADER = "| Name | Forge | Default branch | Kit | Summary |\n|---|---|---|---|---|\n"
 
 
 def write(root: Path, rel: str, text: str) -> None:
@@ -42,19 +42,19 @@ class Base(unittest.TestCase):
 
 
 class RepositoryTable(Base):
-    def test_keeps_manifest_order(self):
+    def test_two_repos_render_new_header_in_manifest_order(self):
         write(self.root, "repos.json", dump({"repositories": [
             {"name": "b-repo", "remote": "git@x:b.git", "forge": "github",
-             "default_branch": "master", "roles": [], "summary": "Second"},
+             "default_branch": "master", "summary": "Second"},
             {"name": "a-repo", "remote": "git@x:a.git", "forge": "gitlab",
-             "default_branch": "main", "roles": ["backend", "qa"], "summary": "First"},
+             "default_branch": "main", "summary": "First"},
         ]}))
         write(self.root, "REPOSITORIES.md", REPOS_MD)
         out = gen_tables.render(self.root)
         expected = (
             "# Repos\n\nIntro\n<!-- repos:begin -->\n" + HEADER
-            + "| b-repo | github | master |  |  | Second |\n"
-            + "| a-repo | gitlab | main | backend, qa |  | First |\n"
+            + "| b-repo | github | master |  | Second |\n"
+            + "| a-repo | gitlab | main |  | First |\n"
             + "<!-- repos:end -->\nTail\n"
         )
         self.assertEqual(out["REPOSITORIES.md"], expected.encode("utf-8"))
@@ -67,14 +67,14 @@ class RepositoryTable(Base):
              "default_branch": "main", "roles": ["frontend"], "summary": "Operations",
              "kit": {"kind": "mfe", "params": {"APP_NAME": "abs-operations"}}},
             {"name": "docs-site", "remote": "git@x:docs.git", "forge": "github",
-             "default_branch": "main", "roles": [], "summary": "Docs"},
+             "default_branch": "main", "summary": "Docs"},
         ]}))
         write(self.root, "REPOSITORIES.md", REPOS_MD)
         out = gen_tables.render(self.root)
         expected = (
             "# Repos\n\nIntro\n<!-- repos:begin -->\n" + HEADER
-            + "| mfe-abs-operations | gitlab | main | frontend | mfe | Operations |\n"
-            + "| docs-site | github | main |  |  | Docs |\n"
+            + "| mfe-abs-operations | gitlab | main | mfe | Operations |\n"
+            + "| docs-site | github | main |  | Docs |\n"
             + "<!-- repos:end -->\nTail\n"
         )
         self.assertEqual(out["REPOSITORIES.md"], expected.encode("utf-8"))
@@ -184,34 +184,37 @@ class AliasIndex(Base):
         self.assertEqual(gen_tables.render(self.root)[".agents/index.json"],
                          dump({"adr:0001": "docs/adr/0001-a.md"}).encode("utf-8"))
 
-    def test_work_record_does_not_change_index(self):
-        write(self.root, "docs/adr/0001-a.md", "a\n")
-        write(self.root, "repos.json", dump({"repositories": []}))
-        write(self.root, "environments.json", dump({"stands": [{"key": "stand:dev"}]}))
-        write(self.root, "domains/pay/README.md", "pay\n")
-        before = gen_tables.render(self.root)[".agents/index.json"]
-        write(self.root, "work/TASK-1/record.md", "---\ntask: TASK-1\n---\n")
-        write_out(self.root, gen_tables.render(self.root))
-        after = gen_tables.render(self.root)[".agents/index.json"]
-        self.assertEqual(before, after)
-        keys = list(json.loads(after))
-        self.assertEqual(keys, ["adr:0001"])
 
+STREAM = "projects/%s/domains/%s/streams/%s/stream.json"
+STORY = "projects/%s/domains/%s/streams/%s/stories/%s/story.md"
 
-STREAM = "domains/%s/streams/%s/stream.json"
-STORY = "domains/%s/streams/%s/stories/%s/story.md"
+# Minimal valid profile so the screen file is a discovered element in test_screen_file_adds_no_entry.
+PROFILE = {
+    "name": "ui-migration",
+    "elements": [
+        {"kind": "screen", "prefix": "screen", "dir": "map",
+         "fields": ["key"], "may_be_empty": [], "values": {}, "tables": []}
+    ],
+    "story": {"fields": ["key", "type", "status", "tracker"], "sections": ["Goal"]},
+    "stages": {"goal": [], "map": [], "decomposition": [], "ready": [], "delivery": [], "done": []},
+}
 
 
 def story_text(key: str, tracker: str = "") -> str:
-    return "---\nkey: %s\ntype: story\ntracker: %s\n---\n# Story\n" % (key, tracker)
+    return "---\nkey: %s\ntype: story\nstatus: waiting\ntracker: %s\n---\n# Story\n" % (key, tracker)
+
+
+def task_text(key: str, tracker: str = "") -> str:
+    return "---\nkey: %s\ntype: e2e\nstatus: waiting\ntracker: %s\n---\n# Task\n" % (key, tracker)
 
 
 class LifecycleIndex(Base):
-    def add_stream(self, domain: str, stream: str) -> None:
-        write(self.root, STREAM % (domain, stream), dump({"key": "stream:%s/%s" % (domain, stream)}))
+    def add_stream(self, project: str, domain: str, stream: str) -> None:
+        write(self.root, STREAM % (project, domain, stream),
+              dump({"key": "stream:%s/%s/%s" % (project, domain, stream)}))
 
-    def add_story(self, domain: str, stream: str, slug: str, text: str) -> str:
-        rel = STORY % (domain, stream, slug)
+    def add_story(self, project: str, domain: str, stream: str, slug: str, text: str) -> str:
+        rel = STORY % (project, domain, stream, slug)
         write(self.root, rel, text)
         return rel
 
@@ -221,41 +224,50 @@ class LifecycleIndex(Base):
     def test_mockups_follow_external_file_order_among_diagrams(self):
         write(self.root, "docs/diagrams/flow.md", "flow\n")
         write(self.root, "docs/diagrams/external.json", dump({"diagrams": [
-            {"key": "mockup:ops/list", "url": "https://figma.example/list"},
+            {"key": "mockup:abs/operations/list", "url": "https://figma.example/list"},
             {"key": "diagram:c4", "url": "https://arch.example/c4"},
             {"key": "mockup:", "url": "https://figma.example/empty"},
-            {"key": "mockup:ops/card", "url": "https://figma.example/card"},
+            {"key": "mockup:abs/operations/card", "url": "https://figma.example/card"},
         ]}))
         self.assertEqual(list(self.index().items()), [
             ("diagram:flow", "docs/diagrams/flow.md"),
-            ("mockup:ops/list", "https://figma.example/list"),
+            ("mockup:abs/operations/list", "https://figma.example/list"),
             ("diagram:c4", "https://arch.example/c4"),
-            ("mockup:ops/card", "https://figma.example/card"),
+            ("mockup:abs/operations/card", "https://figma.example/card"),
         ])
 
     def test_story_alias(self):
-        self.add_stream("operations", "migration")
-        rel = self.add_story("operations", "migration", "documents",
-                             story_text("story:operations/documents", "DEMO-145"))
-        self.assertEqual(self.index(), {"story:operations/documents": rel, "DEMO-145": rel})
+        self.add_stream("abs", "operations", "migration")
+        rel = self.add_story("abs", "operations", "migration", "documents",
+                             story_text("story:abs/operations/documents", "ODARM-145"))
+        self.assertEqual(self.index(), {"story:abs/operations/documents": rel, "ODARM-145": rel})
 
-    def test_order_adrs_diagrams_stories_then_trackers(self):
+    def test_task_alias(self):
+        rel = "tasks/e2e-checkout/task.md"
+        write(self.root, rel, task_text("task:e2e-checkout", "DEMO-3"))
+        self.assertEqual(self.index(), {"task:e2e-checkout": rel, "DEMO-3": rel})
+
+    def test_order_adrs_diagrams_stories_tasks_then_trackers(self):
         write(self.root, "docs/adr/0001-a.md", "a\n")
         write(self.root, "docs/diagrams/external.json", dump(
-            {"diagrams": [{"key": "mockup:ops/list", "url": "https://figma.example/list"}]}))
-        self.add_stream("ops", "b-stream")
-        self.add_stream("billing", "a-stream")
-        zeta = self.add_story("ops", "b-stream", "zeta", story_text("story:ops/zeta", "OPS-1"))
-        alpha = self.add_story("ops", "b-stream", "alpha", story_text("story:ops/alpha", "OPS-9"))
-        pay = self.add_story("billing", "a-stream", "pay", story_text("story:billing/pay", "BIL-5"))
+            {"diagrams": [{"key": "mockup:abs/operations/list", "url": "https://figma.example/list"}]}))
+        self.add_stream("ops", "core", "b-stream")
+        self.add_stream("billing", "payments", "a-stream")
+        zeta = self.add_story("ops", "core", "b-stream", "zeta", story_text("story:ops/core/zeta", "OPS-1"))
+        alpha = self.add_story("ops", "core", "b-stream", "alpha", story_text("story:ops/core/alpha", "OPS-9"))
+        pay = self.add_story("billing", "payments", "a-stream", "pay", story_text("story:billing/payments/pay", "BIL-5"))
+        checkout = "tasks/e2e-checkout/task.md"
+        write(self.root, checkout, task_text("task:e2e-checkout", "DEMO-3"))
         out = gen_tables.render(self.root)
         self.assertEqual(list(json.loads(out[".agents/index.json"]).items()), [
             ("adr:0001", "docs/adr/0001-a.md"),
-            ("mockup:ops/list", "https://figma.example/list"),
-            ("story:billing/pay", pay),
-            ("story:ops/alpha", alpha),
-            ("story:ops/zeta", zeta),
+            ("mockup:abs/operations/list", "https://figma.example/list"),
+            ("story:billing/payments/pay", pay),
+            ("story:ops/core/alpha", alpha),
+            ("story:ops/core/zeta", zeta),
+            ("task:e2e-checkout", checkout),
             ("BIL-5", pay),
+            ("DEMO-3", checkout),
             ("OPS-1", zeta),
             ("OPS-9", alpha),
         ])
@@ -263,40 +275,64 @@ class LifecycleIndex(Base):
         self.assertEqual(gen_tables.render(self.root), out)
 
     def test_empty_tracker_gives_no_alias(self):
-        self.add_stream("ops", "s")
-        rel = self.add_story("ops", "s", "a", story_text("story:ops/a"))
-        self.add_story("ops", "s", "b", "---\nkey: story:ops/b\ntype: story\n---\n")
-        self.assertEqual(self.index(), {"story:ops/a": rel, "story:ops/b": STORY % ("ops", "s", "b")})
+        self.add_stream("ops", "core", "s")
+        rel = self.add_story("ops", "core", "s", "a", story_text("story:ops/core/a"))
+        self.add_story("ops", "core", "s", "b", "---\nkey: story:ops/core/b\ntype: story\n---\n")
+        write(self.root, "tasks/plain/task.md", "---\nkey: task:plain\ntype: chore\nstatus: waiting\n---\n")
+        self.assertEqual(self.index(), {
+            "story:ops/core/a": rel,
+            "story:ops/core/b": STORY % ("ops", "core", "s", "b"),
+            "task:plain": "tasks/plain/task.md",
+        })
 
     def test_broken_frontmatter_gives_no_entry(self):
-        self.add_stream("ops", "s")
-        self.add_story("ops", "s", "broken", "---\nkey: story:ops/broken\ntracker: OPS-2\n")
-        self.add_story("ops", "s", "blank", "---\nkey: story:ops/blank\n\ntracker: OPS-3\n---\n")
+        self.add_stream("ops", "core", "s")
+        self.add_story("ops", "core", "s", "broken", "---\nkey: story:ops/core/broken\ntracker: OPS-2\n")
+        self.add_story("ops", "core", "s", "blank", "---\nkey: story:ops/core/blank\n\ntracker: OPS-3\n---\n")
+        write(self.root, "tasks/broken/task.md", "---\nkey: task:broken\ntracker: OPS-4\n")
         self.assertEqual(self.index(), {})
 
     def test_duplicate_tracker_first_story_key_wins(self):
-        self.add_stream("ops", "s")
-        first = self.add_story("ops", "s", "a", story_text("story:ops/a", "OPS-1"))
-        second = self.add_story("ops", "s", "b", story_text("story:ops/b", "OPS-1"))
-        self.assertEqual(self.index(), {"story:ops/a": first, "story:ops/b": second, "OPS-1": first})
+        self.add_stream("ops", "core", "s")
+        first = self.add_story("ops", "core", "s", "a", story_text("story:ops/core/a", "OPS-1"))
+        second = self.add_story("ops", "core", "s", "b", story_text("story:ops/core/b", "OPS-1"))
+        self.assertEqual(self.index(),
+                         {"story:ops/core/a": first, "story:ops/core/b": second, "OPS-1": first})
 
-    def test_screens_and_streams_never_appear(self):
+    def test_screen_file_adds_no_entry(self):
         write(self.root, "docs/adr/0001-a.md", "a\n")
-        self.add_stream("ops", "s")
+        write(self.root, ".agents/profiles/ui-migration/profile.json", dump(PROFILE))
         before = gen_tables.render(self.root)[".agents/index.json"]
-        write(self.root, "domains/ops/map/documents.md", "---\nkey: screen:ops/documents\n---\n")
-        write(self.root, "domains/ops/MAP.md", "# Map\n")
+        write(self.root, "projects/abs/domains/operations/map/documents.md",
+              "---\nkey: screen:abs/operations/documents\n---\n")
         after = gen_tables.render(self.root)[".agents/index.json"]
         self.assertEqual(before, after)
         self.assertEqual(list(json.loads(after)), ["adr:0001"])
 
+    def test_derivable_keys_stay_out(self):
+        write(self.root, "docs/adr/0001-a.md", "a\n")
+        write(self.root, "repos.json",
+              dump({"repositories": [{"name": "web", "forge": "gitlab", "default_branch": "main"}]}))
+        write(self.root, "environments.json", dump({"stands": [{"key": "stand:dev"}]}))
+        write(self.root, "projects/abs/domains/operations/MAP.md", "# Map\n")
+        self.add_stream("abs", "operations", "main")
+        self.add_story("abs", "operations", "main", "documents",
+                       story_text("story:abs/operations/documents", "ODARM-145"))
+        task_rel = "tasks/e2e-checkout/task.md"
+        write(self.root, task_rel, task_text("task:e2e-checkout", "DEMO-3"))
+        keys = list(self.index())
+        self.assertEqual(keys, ["adr:0001", "story:abs/operations/documents",
+                                "task:e2e-checkout", "DEMO-3", "ODARM-145"])
+        for prefix in ("repo:", "stand:", "domain:", "screen:", "stream:"):
+            self.assertFalse(any(k.startswith(prefix) for k in keys), prefix)
+
     def test_ignored_story_excluded(self):
-        self.add_stream("ops", "s")
-        kept = self.add_story("ops", "s", "kept", story_text("story:ops/kept", "OPS-1"))
-        self.add_story("ops", "s", "ignored", story_text("story:ops/ignored", "OPS-2"))
-        write(self.root, ".gitignore", "domains/ops/streams/s/stories/ignored/\n")
+        self.add_stream("ops", "pay", "s")
+        kept = self.add_story("ops", "pay", "s", "kept", story_text("story:ops/pay/kept", "OPS-1"))
+        self.add_story("ops", "pay", "s", "ignored", story_text("story:ops/pay/ignored", "OPS-2"))
+        write(self.root, ".gitignore", "projects/ops/domains/pay/streams/s/stories/ignored/\n")
         subprocess.run(["git", "init", "-q"], cwd=str(self.root), check=True)
-        self.assertEqual(self.index(), {"story:ops/kept": kept, "OPS-1": kept})
+        self.assertEqual(self.index(), {"story:ops/pay/kept": kept, "OPS-1": kept})
 
 
 if __name__ == "__main__":

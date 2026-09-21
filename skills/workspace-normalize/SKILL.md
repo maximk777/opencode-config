@@ -1,6 +1,6 @@
 ---
 name: workspace-normalize
-description: Use when the workspace-builder agent must bring an existing team workspace without .agents/kit.json under the workspace kit
+description: Use when the workspace-builder agent must bring an existing team workspace without .agents/kit.json, or with a kit stamp older than 0.5.0, under the workspace kit
 ---
 # Normalize a workspace
 
@@ -8,8 +8,8 @@ Bring an existing workspace under the kit in a git worktree: an approved plan fi
 
 ## When
 
-- The owner points to an existing git repository that has a remote `origin` and no `.agents/kit.json` on its default branch (base phase), or that has both `.agents/kit.json` and `docs/normalize/plan.md` there with `todo` rows under a domain (domain phase).
-- A repository with `.agents/kit.json` and no `docs/normalize/plan.md` is a kit workspace: stop and use the workspace-extend skill instead.
+- The owner points to an existing git repository that has a remote `origin` and on its default branch either no `.agents/kit.json`, or a `.agents/kit.json` whose `version` is older than `0.5.0` (base phase), or both `.agents/kit.json` of `0.5.0` or later and `docs/normalize/plan.md` with `todo` rows under a domain (domain phase).
+- A repository with a `.agents/kit.json` of `0.5.0` or later and no `docs/normalize/plan.md` is a kit workspace: stop and use the workspace-extend skill instead. A kit stamp older than `0.5.0` is a migration: the base phase adopts the `0.5.0` kit files and then applies the six migration rows of Phase 2 step 2.
 - An empty directory or a new workspace: stop and use the workspace-create skill instead.
 - A branch or worktree `normalize-base` or `normalize-<domain>` already exists: Phase 0 step 7 stops and asks the owner whether to continue it or recreate it.
 
@@ -24,7 +24,7 @@ The owner's checkout is read only. In `<checkout>` you run only `git rev-parse`,
 3. Run `cd <checkout> && git fetch --prune origin`. It updates only remote-tracking refs and drops refs of branches deleted on the remote. When it fails, stop and show the git error.
 4. Take the owner's snapshot after the fetch, so remote-tracking changes do not count: `cd <checkout> && git rev-parse HEAD && git branch --show-current && git status --porcelain=v1 --untracked-files=all`. Keep the output; step 10 compares it.
 5. Run `cd <checkout> && git ls-remote --symref origin HEAD`. The first line reads `ref: refs/heads/master	HEAD`; the name after `refs/heads/` is `<default>`.
-6. Run `cd <checkout> && git cat-file -e origin/<default>:.agents/kit.json`. In the base phase, when it exits 0, stop: the workspace is already under the kit, use workspace-extend. In a domain phase it must exit 0, and so must `cd <checkout> && git cat-file -e origin/<default>:docs/normalize/plan.md`; when either fails, stop and tell the owner that the base merge request is not merged yet. Then count the `todo` rows under `### <domain>` of that plan; when it prints `0`, stop and tell the owner that the domain is already done or is not in the plan:
+6. Run `cd <checkout> && git cat-file -e origin/<default>:.agents/kit.json`. In the base phase, when it exits 0, read the stamp version: `cd <checkout> && git show origin/<default>:.agents/kit.json`. When the version is `0.5.0` or later, stop: the workspace is already under the current kit, use workspace-extend. When it is older, the base phase is a migration: the plan gets the six migration rows of Phase 2 step 2 directly after the `adopt` row. In a domain phase it must exit 0, and so must `cd <checkout> && git cat-file -e origin/<default>:docs/normalize/plan.md`; when either fails, stop and tell the owner that the base merge request is not merged yet. Then count the `todo` rows under `### <domain>` of that plan; when it prints `0`, stop and tell the owner that the domain is already done or is not in the plan:
    ```
    cd <checkout> && git cat-file -p origin/<default>:docs/normalize/plan.md | python3 -c '
    import sys
@@ -99,6 +99,12 @@ Actions:
 - `remove`: the file leaves git, with link repair.
 - `keep`: the file stays where it is.
 - `import`: a file from a read-only input outside the workspace, such as an architect's PoC folder, is copied into the workspace unchanged; the source is written with `~/`, never as an absolute home path.
+- `projectize`: a migration row; creates `projects/<key>/` with `PROJECT.md` — the key agreed with the owner, defaulting to the workspace name — and moves every `domains/<domain>/` into it; ADRs stay in `docs/adr/`.
+- `retarget`: a migration row; rewrites `story:`, `stream:`, `domain:`, `screen:` and `mockup:` keys to the project-prefixed form and regenerates `.agents/index.json`.
+- `work merge`: a migration row; moves a `work/<ID>/record.md` into the folder of the task its id resolves to, as `work.md` with `recorded` from the record's last commit date, and stamps that task `status: done`; a record that resolves to no task becomes a `keep` row instead.
+- `status stamp`: a migration row; gives every story without a work record `status: waiting`, empty `owner` and `started`.
+- `roles off`: a migration row; deletes `.agents/roles/` and drops `roles` from every `repos.json` entry.
+- `trackers convert`: a migration row; turns `tracker/tracker.json` into `tracker/trackers.json` with one entry whose key the owner names.
 - `check`: `tools/generate.py`, then `tools/check.py` must exit 0; it closes a phase.
 
 The rows are the plan order, and every phase applies them top to bottom. The base phase takes «Основа», then «Личное». Write the «Основа» rows in the order of the Phase 2 steps:
@@ -113,6 +119,8 @@ The rows are the plan order, and every phase applies them top to bottom. The bas
 Write the personal file rows under «Личное», and the base `check` row as its last row.
 
 Write the rows under each `### <domain>` of «Домены» in the order of the Phase 3 steps; «Domain rows» in Phase 3 shows a filled example.
+
+A migration base phase — the stamp was older than `0.5.0` — skips the inventory of a legacy container and the `convert`, `adr`, `move` and `personal` rows of the list above: the workspace tree is already the kit tree of an older kit, so there is no legacy folder, no design notes to convert and no personal files in git. Its «Основа» holds the `adopt` row, the `merge` rows that its conflicts demand, then the six migration rows in the order of Phase 2 step 2 — `projectize`, `retarget`, `work merge`, `status stamp`, `roles off`, `trackers convert`; «Личное» holds only the `check` row, and «Домены» and «Вне change» hold no rows. The migration never touches `.local/`.
 
 Row statuses: `todo`, `done`, `excluded`. A row becomes `done` only after its change is applied and verified against the worktree by the checks in «Resume by plan status», and `excluded` only by the owner's word.
 
@@ -232,7 +240,7 @@ Run this phase in `<wt>` on `normalize-base`, and only when the plan says `Ст�
      ' origin/<default>
      ```
    - Read the output. Every `conflict: <path>` line is a kit file that already exists with different content; adopt left the existing file alone and did not copy the kit version. Every other kit file was copied, and `.agents/kit.json` was written.
-   - A conflict on a templated path (the `templated` list in `~/.config/opencode/kits/workspace/kit.json`: `AGENTS.md`, `README.md`, `REPOSITORIES.md`, `docs/ARCHITECTURE.md`, `tracker/tracker.json`) is handled by its `merge` row in step 2. A templated conflict without a `merge` row is a deviation, as below.
+   - A conflict on a templated path (the `templated` list in `~/.config/opencode/kits/workspace/kit.json`: `AGENTS.md`, `README.md`, `REPOSITORIES.md`, `docs/ARCHITECTURE.md`, `tracker/tracker.json`) is handled by its `merge` row in step 3. A templated conflict without a `merge` row is a deviation, as below.
    - Any other conflict stops the run. Show both versions with `diff <wt>/<path> ~/.config/opencode/kits/workspace/<path>` and ask the owner. Write the decision as a new `merge` row directly after the `adopt` row, set the plan back to `черновик`, and get it approved again before you apply the row. For `.gitignore` the usual proposal is to append the kit lines that are missing: when `.claude/` or `CLAUDE.md` stays ignored, `check` reports the generated `CLAUDE.md` as missing.
    - Record the conflicts in the `adopt` row note, for example `workspace_name=legacy-backoffice, forge=gitlab, language=ru; conflicts: .gitignore, README.md, REPOSITORIES.md`. A record needs no new approval («Approval» step 4). Never copy the absolute `<wt>` path into the plan.
 
@@ -244,14 +252,84 @@ Run this phase in `<wt>` on `normalize-base`, and only when the plan says `Ст�
    adopted kit workspace 0.3.0 into /Users/owner/work/legacy-backoffice-workspace-normalize-base
    ```
 
-2. The `merge` rows: merge each templated file with the sources in its row. The kit version of `<path>` is `~/.config/opencode/kits/workspace/<path>` with `{{title}}` and `{{workspace_name}}` replaced by the adopt parameters. When `<path>` had no conflict, adopt already copied that version into `<wt>`. Merge only from the sources named in the row; another source is a deviation. Never copy a home path. Write a relative path or a key instead, or ask the owner. A source file of a `convert` row leaves git only when the plan has a `remove` row for it.
+2. The migration rows: only in a migration base phase, where the stamp on `origin/<default>` is older than `0.5.0`. Six rows, applied in this order after the `adopt` row and its `merge` rows and before the closing `check` row. The tree is already the kit tree of an older kit: there is no legacy container, existing ADRs stay in `docs/adr/`, and `.local/` is never touched.
+
+   The `adopt` row of a migration: the old stamp makes adopt refuse to run, so this row replaces it. Print the old parameters, remove the stamp, and run the adopt command of step 1 with them:
+   ```
+   cd <wt> && python3 -m json.tool .agents/kit.json
+   cd <wt> && git rm -q .agents/kit.json
+   ```
+   Take `language` from the «Язык workspace» line of the plan when the old stamp has none, and ask the owner, one question per message, for a value no source gives. adopt copies the `0.5.0` kit files over the old ones and prints the conflicts; a templated conflict becomes a `merge` row as in step 1, and on a resume with `.agents/kit.json` already at `0.5.0` the command is skipped by the step 1 rule. Two conflicts never become `merge` rows in a migration: `repos.json` resolves by the `roles off` row (the workspace's own manifest stays), and `tracker/trackers.json` resolves by the `trackers convert` row. The `0.5.0` kit dropped `work/.gitkeep` and `.agents/templates/work-record.md`, and no kit file replaces them; remove both in this row when they exist: `git rm -f work/.gitkeep .agents/templates/work-record.md`. Record the conflicts in the `adopt` row note.
+
+   - `projectize`: ask the owner for the project key `<key>`; the default, and the usual answer, is the workspace name from the stamp. Then move the domains and create the project file:
+      ```
+      cd <wt> && mkdir -p projects/<key> && git mv domains projects/<key>/domains
+      cd <wt> && cp .agents/templates/project.md projects/<key>/PROJECT.md
+      ```
+      Fill `PROJECT.md`: `<project>` in the frontmatter and `<name>` in the H1 are `<key>`; ask the owner for the purpose when no entry document gives one.
+   - `retarget`: rewrite every `story:`, `stream:`, `domain:`, `screen:` and `mockup:` key of the moved tree to the project-prefixed form — `story:operations/documents` becomes `story:<key>/operations/documents`. A key that already carries `<key>/` stays as it is:
+      ```
+      cd <wt> && python3 -c '
+      import pathlib, re, sys
+      pattern = re.compile(r"(?<![\w/-])((?:story|stream|domain|screen|mockup):)(?!%s/)" % re.escape(sys.argv[1]))
+      for path in sorted(pathlib.Path("projects/" + sys.argv[1]).rglob("*")):
+          if not path.is_file() or path.suffix not in (".md", ".json"):
+              continue
+          text = path.read_text(encoding="utf-8")
+          new = pattern.sub(r"\1%s/" % sys.argv[1], text)
+          if new != text:
+              path.write_text(new, encoding="utf-8")
+      ' <key>
+      ```
+      Then `cd <wt> && python3 tools/generate.py` regenerates `.agents/index.json` with the prefixed keys. Only the moved tree is rewritten: the kit files were merged or replaced at `adopt`, and an old key in another hand-written file is existing content, handled by «Findings in existing content».
+   - `work merge`: for every `work/<ID>/record.md`, in sorted order:
+      - Read the record's `task:` field and resolve the id: the task is the story or workspace task whose frontmatter carries `tracker: <ID>`, found with `cd <wt> && grep -rl -e "^tracker: <ID>$" --include=story.md --include=task.md projects tasks`.
+      - When exactly one task resolves, move the record into that task's folder as `work.md`, take `recorded` from the record's last commit date, and replace the `task:` line with it:
+        ```
+        cd <wt> && git log -1 --format=%as -- work/<ID>/record.md
+        cd <wt> && git mv work/<ID>/record.md <task folder>/work.md && rmdir work/<ID>
+        cd <wt> && python3 -c '
+        import sys
+        path, task, date = sys.argv[1], sys.argv[2], sys.argv[3]
+        text = open(path, encoding="utf-8").read()
+        open(path, "w", encoding="utf-8").write(text.replace("task: %s\n" % task, "recorded: %s\n" % date, 1))
+        ' <task folder>/work.md <ID> <date>
+        ```
+        Then give that task's frontmatter the stamp of `status stamp` below, with `done` instead of `waiting`.
+      - When the record resolves to no task — no `task:` field, or no frontmatter carries the id — write a `keep` row for it, for example `| work/TASK-9/record.md | keep | - | todo | no task carries TASK-9 |`, and change nothing: the file stays in place for the owner. Never delete an unresolved record.
+      - When the id matches several tasks, that is an open question and the record stays in place until the owner resolves it.
+   - `status stamp`: every story that got no work record keeps its queue place as `waiting`. When the story frontmatter has no `status` line, insert three lines directly after its `type:` line — `status: waiting`, then an empty `owner:`, then an empty `started:`; `task-start` fills the two. A story that already carries a `status` line stays as it is.
+   - `roles off`: `cd <wt> && git rm -r -q .agents/roles`, and drop the `roles` key from every `repos.json` entry:
+      ```
+      cd <wt> && python3 -c '
+      import json
+      data = json.load(open("repos.json"))
+      for entry in data["repositories"]:
+          entry.pop("roles", None)
+      open("repos.json", "w", encoding="utf-8").write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+      '
+      ```
+      The generated Roles column of `REPOSITORIES.md` disappears at the next `tools/generate.py` run.
+   - `trackers convert`: ask the owner for the tracker key (propose `main`, the kit default), then turn `tracker/tracker.json` into `tracker/trackers.json` and remove the old file:
+      ```
+      cd <wt> && python3 -c '
+      import json, sys
+      old = json.load(open("tracker/tracker.json"))
+      data = {"trackers": [{"key": sys.argv[1], "id_pattern": old["id_pattern"], "url": old["url"]}]}
+      open("tracker/trackers.json", "w", encoding="utf-8").write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+      ' <key>
+      cd <wt> && git rm -q tracker/tracker.json
+      ```
+      This row also resolves the `tracker/trackers.json` conflict of the `adopt` row: the workspace's own `id_pattern` and `url` win over the rendered kit file.
+
+3. The `merge` rows: merge each templated file with the sources in its row. The kit version of `<path>` is `~/.config/opencode/kits/workspace/<path>` with `{{title}}` and `{{workspace_name}}` replaced by the adopt parameters. When `<path>` had no conflict, adopt already copied that version into `<wt>`. Merge only from the sources named in the row; another source is a deviation. Never copy a home path. Write a relative path or a key instead, or ask the owner. A source file of a `convert` row leaves git only when the plan has a `remove` row for it.
    - `AGENTS.md`: keep every kit section, in the kit's order and wording: «Start here», «Folder map», «Personal layer», «Keys and links», «Skills», «Changes», «More». Under the title, add what the workspace is, taken from the entry documents (for example `README.md` and `legacy-app/README.md`). Add a «Folder map» row for each project folder the kit table lacks, for example `| legacy-app/ | domains not yet under the lifecycle | normalize-<domain> merge requests |`. When an existing instruction contradicts a kit rule, do not copy it; list it for the owner.
    - `README.md`: start from the kit version. Keep the project text meant for people from the existing file, such as purpose, contacts and useful links. Put it as extra sections after «Where things are» and before «Changing the workspace», so the kit sections «Changing the workspace» and «Optional tools» stay last.
-   - `REPOSITORIES.md`: the text above `<!-- repos:begin -->` is the existing hand-written description: what each repository or group does and how they depend on each other. Between the markers keep only the kit header; step 9 fills in the rows. The rows of the old hand-kept table go into `repos.json` in step 3, not into the text.
+   - `REPOSITORIES.md`: the text above `<!-- repos:begin -->` is the existing hand-written description: what each repository or group does and how they depend on each other. Between the markers keep only the kit header; step 10 fills in the rows. The rows of the old hand-kept table go into `repos.json` in step 4, not into the text.
    - `docs/ARCHITECTURE.md`: keep the kit sections «Purpose», «Systems», «Domains», «Decisions», «Diagrams» and replace their placeholder lines with text from the source (for example `legacy-app/ARCHITECTURE.md`). A source section that fits none of them goes after «Diagrams» under its own heading. Link with a key only when its target exists on this branch; `domain:` keys do not resolve until the domain phases.
    - `tracker/tracker.json`: keep the kit version with the parameters.
 
-3. The `convert` row for `repos.json`: write it from the repository lists named in the row, one entry per repository. Use the key order and JSON format of step 7 in `.agents/skills/repos-add/SKILL.md`.
+4. The `convert` row for `repos.json`: write it from the repository lists named in the row, one entry per repository. Use the key order and JSON format of step 7 in `.agents/skills/repos-add/SKILL.md`.
    - `name`: the name in the table row.
    - `remote`: the URL in the clone script line for that name.
    - `forge`: from the remote host, by step 3 of `.agents/skills/repos-add/SKILL.md`.
@@ -275,7 +353,7 @@ Run this phase in `<wt>` on `normalize-base`, and only when the plan says `Ст�
    }
    ```
 
-4. The `adr` rows: convert design notes into ADRs, one row at a time.
+5. The `adr` rows: convert design notes into ADRs, one row at a time.
    - Run `git mv <source> docs/adr/NNNN-<slug>.md` with the target from the plan, so git history follows the note. The slug uses only `a-z`, `0-9` and `-`. The numbers start at `0001`, in the order fixed in Phase 1: by the note's date, then by file name.
    - Rewrite the file into the shape of `.agents/templates/adr.md`. Frontmatter:
      - `key: adr:NNNN`;
@@ -300,12 +378,12 @@ Run this phase in `<wt>` on `normalize-base`, and only when the plan says `Ст�
    # ADR-0002: Прокси трекера
    ```
 
-5. The `move` rows to `docs/design/` and the `remove` rows.
+6. The `move` rows to `docs/design/` and the `remove` rows.
    - Move: `git mv legacy-app/design/export-notes.md docs/design/export-notes.md`, with the target from the row. The content stays unchanged.
    - Remove: `git rm -r legacy-app/design/_TEMPLATE.md`. Never remove a path that has no `remove` row.
    - Apply «Link repair» for the source path. A link to a removed file points to the replacement named in the row note, for example `.agents/templates/adr.md`. When the note names none, leave the link unchanged and list it for the owner by «Findings in existing content».
 
-6. The diagram `move` rows: move the diagrams to `docs/diagrams/`.
+7. The diagram `move` rows: move the diagrams to `docs/diagrams/`.
    - Run `git mv <source> docs/diagrams/<name>.<ext>` for each row. `<name>` is the stem of the plan target.
    - A Markdown diagram `docs/diagrams/<name>.md` gets the key `diagram:<name>` from `tools/generate.py`. Link to it as `[diagram:<name>](<relative path>)`.
    - Other files (`.png`, `.svg`, `.drawio`, `.puml`) move unchanged next to the Markdown file that embeds them; they get no key of their own.
@@ -322,24 +400,24 @@ Run this phase in `<wt>` on `normalize-base`, and only when the plan says `Ст�
    }
    ```
 
-7. The `move` rows into `tracker/` and `scripts/`: move tracker tooling into `tracker/` and project scripts into `scripts/`; `tools/` belongs to the kit.
+8. The `move` rows into `tracker/` and `scripts/`: move tracker tooling into `tracker/` and project scripts into `scripts/`; `tools/` belongs to the kit.
    - `tracker/` already holds the kit's `tracker/tracker.json`, so move entries one by one: `git mv tools/tracker/mcp-server tracker/mcp-server`, `git mv tools/tracker/openapi.yaml tracker/openapi.yaml`. When a source entry is named `tracker.json`, stop and ask the owner.
    - Move each project script by its row, for example `git mv tools/clone-repos.sh scripts/clone-repos.sh`. Move `tools/vault/` to `scripts/vault/` unchanged with `git mv tools/vault scripts/vault`, and never open its maps.
    - Declare each variable name found in Phase 1 step 6 in `.agents/env.schema.json` as `{"name": "VAULT_ADDR", "issued_by": "...", "how_to_get": "..."}`. Take `issued_by` and `how_to_get` from script comments or documentation; ask the owner when neither gives them. Names only, never values.
    - Apply «Link repair» for each source path. Scripts often name their own paths, such as `tools/vault/`.
    - After the last of these rows, `cd <wt> && git ls-files --cached --others --exclude-standard tools | grep -v -e '^tools/check.py$' -e '^tools/generate.py$' -e '^tools/wslib/'` must print nothing.
 
-8. The «Личное» rows except the last: apply the owner's decisions on personal files, one row at a time.
-   - Promote to `docs/`: `git mv <source> docs/<target>`. A home path left in the text is existing content; step 9 handles it.
+9. The «Личное» rows except the last: apply the owner's decisions on personal files, one row at a time.
+   - Promote to `docs/`: `git mv <source> docs/<target>`. A home path left in the text is existing content; step 10 handles it.
    - Move to `work/<TASK-ID>/`: `git mv <source> work/<TASK-ID>/<file>`. The folder name must match `id_pattern`, and `check` requires `work/<TASK-ID>/record.md`. Create it from `.agents/templates/work-record.md` and fill it only from the file's text; ask the owner for fields no text gives.
    - Remove from git: `git rm <source>`. List each such file in the hand-off report. Tell the owner that its author copies it into `.local/<target>` in their own checkout before pulling the merged default branch, because that pull deletes it.
    - Apply «Link repair» for the source path of every moved or removed file.
 
-9. The `check` row, the last row of «Личное»: generate and check.
-   - `check` verifies only key links (`key-resolve`), not plain relative links. First run the old-path search of «Link repair» once for the source path of every `done` row of this phase that moved or removed a path. It never searches for the file name, so a link already repaired to the new path, such as `[clone](scripts/clone-repos.sh)`, is not a hit. The gate passes when every printed line is one of two exceptions that «Link repair» left unchanged and listed. One is a link to a removed file without a replacement, listed for the owner (step 5). The other is a line that names a different path which only ends in the old one, such as `docs/other.md:1:see docs/tools/clone-repos.sh`, listed for the hand-off report with that reason («Link repair» step 2). Any other printed line is an unrepaired reference: fix it by «Link repair» and search again.
+10. The `check` row, the last row of «Личное»: generate and check.
+   - `check` verifies only key links (`key-resolve`), not plain relative links. First run the old-path search of «Link repair» once for the source path of every `done` row of this phase that moved or removed a path. It never searches for the file name, so a link already repaired to the new path, such as `[clone](scripts/clone-repos.sh)`, is not a hit. The gate passes when every printed line is one of two exceptions that «Link repair» left unchanged and listed. One is a link to a removed file without a replacement, listed for the owner (step 6). The other is a line that names a different path which only ends in the old one, such as `docs/other.md:1:see docs/tools/clone-repos.sh`, listed for the hand-off report with that reason («Link repair» step 2). Any other printed line is an unrepaired reference: fix it by «Link repair» and search again.
    - Run `cd <wt> && python3 tools/generate.py`, then `python3 tools/check.py; echo "exit $?"`. Each finding is a line `path:line rule-id message`.
-   - Count the generated table rows: `python3 -c 'import re; t = open("REPOSITORIES.md").read(); b = t.split("<!-- repos:begin -->")[1].split("<!-- repos:end -->")[0]; print(len(re.findall(r"^\| ", b, re.M)) - 1)'`. It must print the entry count of step 3, for example `29`.
-   - Fix the findings in content this phase wrote: the merged templated files, `repos.json`, `docs/adr/`, `docs/diagrams/external.json`, `.agents/env.schema.json`, new work records and repaired links. Run both commands again until no finding names that content. Example: `docs/adr/0002-tracker-proxy.md:1 adr accepted ADR lacks approved with by and date` is yours; step 4 says where the values come from.
+   - Count the generated table rows: `python3 -c 'import re; t = open("REPOSITORIES.md").read(); b = t.split("<!-- repos:begin -->")[1].split("<!-- repos:end -->")[0]; print(len(re.findall(r"^\| ", b, re.M)) - 1)'`. It must print the entry count of step 4, for example `29`.
+   - Fix the findings in content this phase wrote: the merged templated files, `repos.json`, `docs/adr/`, `docs/diagrams/external.json`, `.agents/env.schema.json`, new work records and repaired links; in a migration also the prefixed keys, `tracker/trackers.json`, `projects/<key>/PROJECT.md` and the stamped story frontmatter. Run both commands again until no finding names that content. Example: `docs/adr/0002-tracker-proxy.md:1 adr accepted ADR lacks approved with by and date` is yours; step 5 says where the values come from.
    - A finding in a file this phase moved without changing its content, or in any other existing file, is existing content, for example `legacy-app/clients/notes.md:14 home-path absolute home path; use a relative path or a key`. Follow «Findings in existing content» in `## Rules`.
    - The base is complete only when `python3 tools/check.py` prints nothing and `exit 0`. Mark the row `done`, then go to `## Hand-off`.
 
@@ -373,8 +451,8 @@ The path map is the plan: each `done` row of this phase that moved a path maps i
    ```
    After `git mv tools/clone-repos.sh scripts/clone-repos.sh` it prints `docs/setup.md:4:[x](../tools/clone-repos.sh)`, `docs/refs.md:7:[clone]: ../tools/clone-repos.sh` and `run.sh:1:sh "$ROOT/tools/clone-repos.sh"`, but not `README.md:2:See [clone](scripts/clone-repos.sh)`.
    Phase 3 step 11 adds `--folder` after the path, as in `' legacy --folder`. A literal mention then counts only when `<old>/` is followed by a path segment, so `docs/a.md:3:see legacy/demo/SITEMAP.md` is printed and the prose word in `docs/a.md:1:The legacy screens move.` is not. Link targets are matched as without the flag.
-2. Fix each hit by the path map. Write the new path relative to the linking file's current place: `python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))' docs/adr/0002-tracker-proxy.md legacy-app/operations/README.md` prints `../../docs/adr/0002-tracker-proxy.md`. Keep the link text; when the text is the old path, replace it with the key, as in `[adr:0002](../../docs/adr/0002-tracker-proxy.md)`. The search also prints a line that names a different path which only ends in `<old>`, such as `docs/other.md:1:see docs/tools/clone-repos.sh`. Leave that line unchanged, and list it with this reason for the hand-off report; step 9 accepts it only when it is listed.
-3. When the row moved a Markdown file, recompute its own relative links for its new folder. Resolve each link from the file's previous folder. When the result, or a parent of it, is mapped by the path map, use the mapped path. Otherwise keep the resolved path. An ADR moved in step 4 that links to a diagram not yet moved keeps pointing at the diagram's old place; the diagram's row in step 6 then finds and fixes that link.
+2. Fix each hit by the path map. Write the new path relative to the linking file's current place: `python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))' docs/adr/0002-tracker-proxy.md legacy-app/operations/README.md` prints `../../docs/adr/0002-tracker-proxy.md`. Keep the link text; when the text is the old path, replace it with the key, as in `[adr:0002](../../docs/adr/0002-tracker-proxy.md)`. The search also prints a line that names a different path which only ends in `<old>`, such as `docs/other.md:1:see docs/tools/clone-repos.sh`. Leave that line unchanged, and list it with this reason for the hand-off report; step 10 accepts it only when it is listed.
+3. When the row moved a Markdown file, recompute its own relative links for its new folder. Resolve each link from the file's previous folder. When the result, or a parent of it, is mapped by the path map, use the mapped path. Otherwise keep the resolved path. An ADR moved in step 5 that links to a diagram not yet moved keeps pointing at the diagram's old place; the diagram's row in step 7 then finds and fixes that link.
 4. A link whose target is on neither side of the path map, is absent from the worktree and never existed on the default branch (`git cat-file -e origin/<default>:<resolved path>` fails) stays unchanged; follow «Findings in existing content».
 
 ## Phase 3: domain
@@ -687,7 +765,7 @@ The example shows a mapped `move`, a `convert` and a `remove` story row; step 7 
    Example for `legacy-app`: `cd <wt> && git ls-files -- legacy-app/` prints `legacy-app/README.md`, `legacy-app/ARCHITECTURE.md` and `legacy-app/EPIC-backoffice-platform-migration.md`, and the row note reads `README.md, ARCHITECTURE.md: merged in the base; EPIC-backoffice-platform-migration.md: owner decision`. Then `git rm -r legacy-app`, «Link repair» for `legacy-app`, and the Folder map row `| legacy-app/ | ... |` leaves `AGENTS.md`.
 
 12. The closing `check` row: generate, check and report the remaining work.
-   - Run the old-path search of «Link repair» for the source path of every `done` row of this phase that moved or removed a path, with `--folder` for the container of step 11; the gate is the one of Phase 2 step 9.
+   - Run the old-path search of «Link repair» for the source path of every `done` row of this phase that moved or removed a path, with `--folder` for the container of step 11; the gate is the one of Phase 2 step 10.
    - Run `cd <wt> && python3 tools/generate.py`, then `python3 tools/check.py; echo "exit $?"`.
    - Fix findings in content this phase wrote: `domains/<domain>/map/`, `MAP.md`, `epic.md`, `stream.json`, story frontmatter, `external.json` and repaired links. A finding that needs a missing fact is never fixed by guessing. Example: `domains/operations/streams/migration/stories/bulk-operations/story.md:10 story repos key repo:arm-backoffice-statements does not resolve`. The repository is missing from `repos.json`; ask the owner to add it with repos-add in its own merge request, or to record an open question. A `missing section` finding on a story is yours: add the heading by step 7. Any other finding in story text, `front.md`, `api.md` or a moved document is existing content, for example a link in `front.md` to a file that never existed; follow «Findings in existing content».
    - Counts: `ls domains/<domain>/map/*.md | wc -l` equals `ls <poc>/map/*.md | wc -l`, or without a PoC the elements step 3 wrote. `ls -d domains/<domain>/streams/<stream>/stories/*/ | wc -l` equals `ls <poc>/stories/*.md | wc -l` plus the kept legacy folders, or without PoC stories the story rows. For `operations` at PoC commit 6994fef with no kept folder, every one of these commands prints `14`.
@@ -743,6 +821,7 @@ Resume only after the owner chose to continue in Phase 0 step 7.
    - `convert` or `adr`: an absent target means not applied; an existing target: show it to the owner and ask whether it is complete; never overwrite it;
    - `remove` or a `personal` removal: a source that is gone means applied;
    - `keep`: a source that still exists means applied;
+   - a migration row: `projectize` checks like a `move` — `projects/<key>/PROJECT.md` exists and `domains/` is gone; `retarget` is applied when no `story:`, `stream:`, `domain:`, `screen:` or `mockup:` key under `projects/` lacks the `<key>/` prefix; `work merge` checks like a `move` per record — `work.md` in the task folder and the record gone; `status stamp` is applied when every story frontmatter carries a `status` line; `roles off` is applied when `.agents/roles/` is gone and no `repos.json` entry carries `roles`; `trackers convert` checks like a `move` — `tracker/trackers.json` exists and `tracker/tracker.json` is gone;
    - `check`, the row that closes a phase: never applied from an earlier run; run it again.
    A row that moves or removes a path may have stopped before its link repair. The `check` row repeats every link search, so those links are caught there.
 4. When the row is already applied, mark it `done` without applying it again. Never run a `move` again blindly.

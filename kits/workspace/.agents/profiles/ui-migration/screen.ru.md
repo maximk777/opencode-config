@@ -1,5 +1,5 @@
 ---
-key: screen:<domain>/<slug>
+key: screen:<project>/<domain>/<slug>
 route: /<route>
 kind: place
 section: <section>

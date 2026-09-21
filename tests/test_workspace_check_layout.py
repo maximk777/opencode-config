@@ -30,11 +30,23 @@ def repo_entry(name, remote, forge="gitlab"):
             "roles": ["backend"], "summary": "Service"}
 
 
+def tracker_entry(key="task", pattern=r"TASK-\d+", url="https://tracker.example/i/{id}"):
+    return {"key": key, "id_pattern": pattern, "url": url}
+
+
+def write_trackers(ws, *entries):
+    write_json(ws, "tracker/trackers.json", {"trackers": list(entries)})
+
+
 class CheckLayoutTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name).resolve()
         self.ws = create_workspace(self.tmp)
+        # The kit templates still ship the old single-tracker file; the check rules already
+        # require the new layout, so tests bridge the gap until the kit update lands.
+        (self.ws / "STATUS.md").write_text("# STATUS\n", encoding="utf-8")
+        write_trackers(self.ws, tracker_entry())
 
     def tearDown(self):
         self._tmp.cleanup()
@@ -57,6 +69,25 @@ class CheckLayoutTest(unittest.TestCase):
         code, lines = self.findings()
         self.assertEqual(code, 1)
         self.assertTrue(any(line.startswith("AGENTS.md:1 layout ") for line in lines), lines)
+
+    def test_missing_status_md(self):
+        (self.ws / "STATUS.md").unlink()
+        code, lines = self.findings()
+        self.assertEqual(code, 1)
+        self.assert_finding(lines, "STATUS.md", "layout")
+
+    def test_missing_trackers_json(self):
+        (self.ws / "tracker/trackers.json").unlink()
+        code, lines = self.findings()
+        self.assertEqual(code, 1)
+        self.assert_finding(lines, "tracker/trackers.json", "layout")
+
+    def test_stray_file_under_projects_is_not_a_project(self):
+        # The kit ships projects/.gitkeep, so projects/ already exists.
+        (self.ws / "projects").mkdir(exist_ok=True)
+        (self.ws / "projects/notes.md").write_text("notes\n", encoding="utf-8")
+        _, lines = self.findings()
+        self.assertEqual([line for line in lines if line.startswith("projects/")], [])
 
     def test_claude_md_ignored_by_git(self):
         # The kit's .gitignore re-includes CLAUDE.md with !CLAUDE.md, which outranks .git/info/exclude.
@@ -139,21 +170,49 @@ class CheckLayoutTest(unittest.TestCase):
         self.assertTrue(any("duplicate remote" in line for line in lines), lines)
 
     def test_tracker_url_without_id(self):
-        write_json(self.ws, "tracker/tracker.json", {"id_pattern": r"TASK-\d+", "url": "https://t.example/i/"})
+        write_trackers(self.ws, tracker_entry(url="https://t.example/i/"))
         _, lines = self.findings()
-        self.assert_finding(lines, "tracker/tracker.json", "json-shape")
+        self.assert_finding(lines, "tracker/trackers.json", "json-shape")
 
     def test_tracker_pattern_does_not_compile(self):
-        write_json(self.ws, "tracker/tracker.json", {"id_pattern": "(DEMO", "url": "https://t.example/i/{id}"})
+        write_trackers(self.ws, tracker_entry(pattern="(DEMO"))
         _, lines = self.findings()
-        self.assert_finding(lines, "tracker/tracker.json", "json-shape")
+        self.assert_finding(lines, "tracker/trackers.json", "json-shape")
 
     def test_tracker_pattern_overflows_compiler(self):
         # re.compile raises OverflowError here, not re.error.
-        write_json(self.ws, "tracker/tracker.json", {"id_pattern": "a{4294967296}", "url": "https://t.example/i/{id}"})
+        write_trackers(self.ws, tracker_entry(pattern="a{4294967296}"))
         code, lines = self.findings()
         self.assertEqual(code, 1)
-        self.assert_finding(lines, "tracker/tracker.json", "json-shape")
+        self.assert_finding(lines, "tracker/trackers.json", "json-shape")
+
+    def test_empty_trackers_list(self):
+        write_trackers(self.ws)
+        _, lines = self.findings()
+        self.assert_finding(lines, "tracker/trackers.json", "json-shape")
+
+    def test_duplicate_tracker_key(self):
+        write_trackers(self.ws, tracker_entry(), tracker_entry("task", r"BUG-\d+", "https://bugs.example/i/{id}"))
+        _, lines = self.findings()
+        self.assert_finding(lines, "tracker/trackers.json", "json-shape")
+
+    def test_valid_trackers_list_passes(self):
+        write_trackers(self.ws, tracker_entry(), tracker_entry("bug", r"BUG-\d+", "https://bugs.example/i/{id}"))
+        _, lines = self.findings()
+        self.assertEqual([line for line in lines if line.startswith("tracker/trackers.json:")], [])
+
+    def test_project_without_project_md(self):
+        (self.ws / "projects/billing").mkdir(parents=True)
+        (self.ws / "projects/billing/README.md").write_text("Billing project\n", encoding="utf-8")
+        code, lines = self.findings()
+        self.assertEqual(code, 1)
+        self.assert_finding(lines, "projects/billing/PROJECT.md", "layout")
+
+    def test_project_md_present(self):
+        (self.ws / "projects/billing").mkdir(parents=True)
+        (self.ws / "projects/billing/PROJECT.md").write_text("Billing project\n", encoding="utf-8")
+        _, lines = self.findings()
+        self.assertEqual([line for line in lines if line.startswith("projects/")], [])
 
     def test_table_cell_characters_in_repository_fields(self):
         for field in ("name", "remote", "default_branch", "summary"):
@@ -165,14 +224,10 @@ class CheckLayoutTest(unittest.TestCase):
                     _, lines = self.findings()
                     self.assert_finding(lines, "repos.json", "json-shape")
 
-    def test_table_cell_characters_in_roles(self):
-        for bad in ("back|end", "back\nend"):
-            with self.subTest(role=bad):
-                entry = repo_entry("api", "git@x:api.git")
-                entry["roles"] = ["qa", bad]
-                write_json(self.ws, "repos.json", {"repositories": [entry]})
-                _, lines = self.findings()
-                self.assert_finding(lines, "repos.json", "json-shape")
+    def test_entry_without_roles_is_valid(self):
+        entry = repo_entry("api", "git@x:api.git")
+        del entry["roles"]
+        self.assertEqual(self.repos_json_lines([entry]), [])
 
     def test_stand_key_without_prefix(self):
         write_json(self.ws, "environments.json", {"stands": [

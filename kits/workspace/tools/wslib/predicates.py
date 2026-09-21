@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import datetime
+import posixpath
 import re
 from collections import namedtuple
 from typing import Dict, List, Optional
 
 from wslib import tables
-from wslib.common import parse_frontmatter
 
 Issue = namedtuple("Issue", "path line detail")
 
@@ -38,7 +38,9 @@ def _element_specs(profile) -> Dict[str, dict]:
 
 def _domain_elements(ws, stream, profile) -> list:
     kinds = _element_specs(profile)
-    return [e for e in ws.element_list if e.domain == stream.domain and e.kind in kinds]
+    # The same domain name may exist in several projects; only the stream's own project counts.
+    return [e for e in ws.element_list
+            if e.project == stream.project and e.domain == stream.domain and e.kind in kinds]
 
 
 def _field_line(ws, rel: str, field: str) -> int:
@@ -163,8 +165,9 @@ def legacy_traced(ws, stream, profile, params) -> List[Issue]:
     for table in _list(map_doc.get("tables")):
         if isinstance(table, dict) and table.get("heading") == heading and isinstance(table.get("target"), str):
             target = table["target"]
-    # A stream's legacy trace lives in the MAP.md of the stream's own domain.
-    rel = ws.map_docs.get(stream.domain, "domains/%s/MAP.md" % stream.domain)
+    # A stream's legacy trace lives in the MAP.md of the stream's own project and domain.
+    rel = ws.map_docs.get("%s/%s" % (stream.project, stream.domain),
+                          "projects/%s/domains/%s/MAP.md" % (stream.project, stream.domain))
     text = ws.ctx.read_text(rel) if rel in ws.ctx.files else None
     if text is None:
         return [Issue(rel, 1, "MAP.md is missing")]
@@ -239,14 +242,19 @@ def tracker_ids(ws, stream, profile, params) -> List[Issue]:
             issues.append(broken)
             continue
         tracker = story.fields.get("tracker")
-        if ws.id_pattern is not None and isinstance(tracker, str) and ws.id_pattern.fullmatch(tracker):
-            continue
-        reason = "id_pattern is missing or invalid" if ws.id_pattern is None else "does not match id_pattern"
-        if isinstance(tracker, str):
-            shown = tracker or "(empty)"
+        line = _field_line(ws, story.path, "tracker")
+        if isinstance(tracker, str) and tracker:
+            matched = ws.match_tracker(tracker)
+            if matched == "ambiguous":
+                issues.append(Issue(story.path, line,
+                                    "tracker %s matches the id_patterns of several trackers" % tracker))
+                continue
+            if matched is not None:
+                continue
+            shown = tracker
         else:
-            shown = "(empty)" if tracker is None else repr(tracker)
-        issues.append(Issue(story.path, _field_line(ws, story.path, "tracker"), "tracker %s: %s" % (shown, reason)))
+            shown = "(empty)" if tracker in (None, "") else repr(tracker)
+        issues.append(Issue(story.path, line, "tracker %s: matches no id_pattern of tracker/trackers.json" % shown))
     return issues
 
 
@@ -271,20 +279,15 @@ def work_records(ws, stream, profile, params) -> List[Issue]:
         if broken is not None:
             issues.append(broken)
             continue
-        tracker = story.fields.get("tracker")
-        line = _field_line(ws, story.path, "tracker")
-        if not isinstance(tracker, str) or not tracker:
-            issues.append(Issue(story.path, line, "story has no tracker id for a work record"))
+        status = story.fields.get("status")
+        line = _field_line(ws, story.path, "status")
+        if status != "done":
+            shown = status if isinstance(status, str) and status else "(missing)"
+            issues.append(Issue(story.path, line, "status is %s, not done" % shown))
             continue
-        rel = "work/%s/record.md" % tracker
-        text = ws.ctx.read_text(rel) if rel in ws.ctx.files else None
-        if text is None:
+        rel = posixpath.dirname(story.path) + "/work.md"
+        if rel not in ws.ctx.files:
             issues.append(Issue(story.path, line, "%s is missing" % rel))
-            continue
-        recorded = _dict(parse_frontmatter(text)[0]).get("story")
-        if recorded != story.key:
-            shown = recorded if isinstance(recorded, str) else "(missing)"
-            issues.append(Issue(story.path, line, "%s has story %s, expected %s" % (rel, shown, story.key)))
     return issues
 
 

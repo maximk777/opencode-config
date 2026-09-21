@@ -5,13 +5,14 @@ import re
 import weakref
 from typing import Dict, List, Optional, Tuple
 
-from wslib.common import Finding, md_links, parse_frontmatter, resolve_target
+from wslib.common import Finding, md_links, resolve_target
+from wslib.model import Workspace
 from wslib.profiles import load_profiles
 
-KEY_RE = re.compile(r"^(adr|diagram|mockup|repo|stand|domain|story|stream):(.+)$")
+KEY_RE = re.compile(r"^(adr|diagram|mockup|repo|stand|domain|story|stream|task):(.+)$")
 ELEMENT_KEY_RE = re.compile(r"^([^:/\s]+):(.+)$")
 PAIR_RE = re.compile(r"^([^/]+)/([^/]+)$")
-STORY_RE = re.compile(r"^domains/[^/]+/streams/[^/]+/stories/[^/]+/story\.md$")
+TRIPLE_RE = re.compile(r"^([^/]+)/([^/]+)/([^/]+)$")
 # CommonMark: a backtick fence's info string may not contain backticks.
 FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}(?!.*`)|~{3,}).*$")
 CODE_SPAN_RE = re.compile(r"(`+)(.+?)\1")
@@ -75,26 +76,38 @@ def lookup(ctx, key: str) -> Tuple[bool, Optional[List[str]]]:
     if not KEY_RE.match(key) and element_dir is None:
         return False, []
     if kind == "adr":
-        adr_re = re.compile(r"^docs/adr/" + re.escape(rest) + r"-[^/]+\.md$")
-        matches = [rel for rel in ctx.files if adr_re.match(rel)]
+        # Numbers are workspace-global, so the file may sit at the root or in any project.
+        adr_re = re.compile(r"^(docs|projects/[^/]+)/adr/" + re.escape(rest) + r"-[^/]+\.md$")
+        matches = sorted(rel for rel in ctx.files if adr_re.match(rel))
         if len(matches) != 1:
             return False, []
         return True, matches
-    if element_dir is not None or kind in ("story", "stream"):
-        pair = PAIR_RE.match(rest)
-        if not pair:
+    if kind == "task":
+        target = "tasks/%s/task.md" % rest
+        return (True, [target]) if target in ctx.files else (False, [])
+    if element_dir is not None or kind in ("domain", "stream", "story"):
+        if kind == "domain":
+            pair = PAIR_RE.match(rest)
+            if not pair:
+                return False, []
+            base = "projects/%s/domains/%s" % (pair.group(1), pair.group(2))
+            exists = any(rel.startswith(base + "/") for rel in ctx.files)
+            return exists, [base, base + "/README.md"]
+        triple = TRIPLE_RE.match(rest)
+        if not triple:
             return False, []
-        domain, name = pair.group(1), pair.group(2)
+        base = "projects/%s/domains/%s" % (triple.group(1), triple.group(2))
+        name = triple.group(3)
         if element_dir is not None:
-            target = "domains/%s/%s/%s.md" % (domain, element_dir, name)
+            target = "%s/%s/%s.md" % (base, element_dir, name)
         elif kind == "stream":
-            target = "domains/%s/streams/%s/stream.json" % (domain, name)
+            target = "%s/streams/%s/stream.json" % (base, name)
         else:
             data = ctx.load_json(".agents/index.json")[0] if ".agents/index.json" in ctx.files else None
             target = data.get(key) if isinstance(data, dict) else None
             # The index entry must name this story's own file, not any other existing file.
             story_re = re.compile(
-                r"^domains/" + re.escape(domain) + r"/streams/[^/]+/stories/" + re.escape(name) + r"/story\.md$")
+                r"^" + re.escape(base) + r"/streams/[^/]+/stories/" + re.escape(name) + r"/story\.md$")
             if not isinstance(target, str) or not story_re.match(target):
                 return False, []
         if target not in ctx.files:
@@ -114,23 +127,7 @@ def lookup(ctx, key: str) -> Tuple[bool, Optional[List[str]]]:
         return name in _json_strings(ctx, "repos.json", "repositories", "name"), None
     if kind == "stand":
         return key in _json_strings(ctx, "environments.json", "stands", "key"), ["environments.json"]
-    prefix = "domains/%s/" % rest
-    exists = any(rel.startswith(prefix) for rel in ctx.files)
-    return exists, ["domains/%s" % rest, "domains/%s/README.md" % rest]
-
-
-def _tracker(ctx) -> Tuple[Optional[re.Pattern], Optional[str]]:
-    data, error = ctx.load_json("tracker/tracker.json")
-    if error is not None or not isinstance(data, dict):
-        return None, None
-    pattern, url = data.get("id_pattern"), data.get("url")
-    if not isinstance(pattern, str) or not isinstance(url, str):
-        return None, None
-    # A bad pattern is reported by json-shape; huge repeats or deep nesting raise more than re.error.
-    try:
-        return re.compile(pattern), url
-    except (re.error, OverflowError, RecursionError, ValueError):
-        return None, None
+    return False, []
 
 
 def _without_code(text: str) -> str:
@@ -172,23 +169,20 @@ def _points_to(rel: str, target: str, accepted: List[str]) -> bool:
     return False
 
 
-def _story_trackers(ctx) -> dict:
-    """Map each non-empty story frontmatter tracker to the story.md paths carrying it."""
-    trackers: dict = {}
-    for rel in ctx.files:
-        if not STORY_RE.match(rel):
-            continue
-        text = ctx.read_text(rel)
-        data = parse_frontmatter(text)[0] if text is not None else None
-        tracker = data.get("tracker") if isinstance(data, dict) else None
+def _tracker_files(ws) -> dict:
+    """Map each non-empty story/task frontmatter tracker to the files carrying it."""
+    carriers: dict = {}
+    for task in list(ws.stories.values()) + list(ws.tasks.values()):
+        fields = task.fields
+        tracker = fields.get("tracker") if isinstance(fields, dict) else None
         if isinstance(tracker, str) and tracker:
-            trackers.setdefault(tracker, []).append(rel)
-    return trackers
+            carriers.setdefault(tracker, []).append(task.path)
+    return carriers
 
 
 def check_key_resolve(ctx) -> List[Finding]:
-    id_re, url = _tracker(ctx)
-    trackers = _story_trackers(ctx) if id_re is not None else {}
+    ws = Workspace(ctx)
+    carriers = _tracker_files(ws)
     findings: List[Finding] = []
     for rel in ctx.files:
         if not rel.endswith(".md"):
@@ -202,13 +196,24 @@ def check_key_resolve(ctx) -> List[Finding]:
                 if not exists:
                     findings.append(Finding(rel, line, "key-resolve", "unknown key %s" % label))
                     continue
-            elif id_re is not None and id_re.fullmatch(label):
-                accepted = [url.replace("{id}", label)]
-                if "work/%s/record.md" % label in ctx.files:
-                    accepted += ["work/%s" % label, "work/%s/record.md" % label]
-                accepted += trackers.get(label, [])
             else:
-                continue
+                key = ws.match_tracker(label)
+                if key == "ambiguous":
+                    names = ", ".join(sorted(t.key for t in ws.trackers if t.pattern.fullmatch(label)))
+                    findings.append(Finding(
+                        rel, line, "key-resolve",
+                        "tracker id %s matches several trackers: %s" % (label, names)))
+                    continue
+                if key is None:
+                    continue
+                tracker = next(t for t in ws.trackers if t.key == key)
+                accepted = [tracker.url.replace("{id}", label)] if tracker.url is not None else []
+                accepted += carriers.get(label, [])
+                if not accepted:
+                    findings.append(Finding(
+                        rel, line, "key-resolve",
+                        "tracker id %s has no tracker url and no story or task carries it" % label))
+                    continue
             if accepted is not None and not _points_to(rel, target, accepted):
                 findings.append(Finding(
                     rel, line, "key-resolve",

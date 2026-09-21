@@ -141,5 +141,41 @@ class WorkspaceBuilderAgent(unittest.TestCase):
         self.assertIn(body, plan["workspace-builder"])
 
 
+class WorkspaceCreateSkill(unittest.TestCase):
+    def setUp(self):
+        self.skill = (REPO / "skills" / "workspace-create" / "SKILL.md").read_text()
+
+    def section(self, heading):
+        start = self.skill.index(heading)
+        end = self.skill.find("\n## ", start + 1)
+        return self.skill[start:] if end == -1 else self.skill[start:end]
+
+    def test_skill_has_no_roles_wording(self):
+        self.assertNotIn("role", self.skill.lower())
+
+    def test_collect_asks_for_trackers_after_the_seed_tracker(self):
+        collect = self.section("## Collect")
+        self.assertIn("{key, id_pattern, url}", collect)
+        self.assertIn("seed tracker", collect)
+
+    def test_describe_fills_trackers_json(self):
+        self.assertIn("tracker/trackers.json", self.section("## Describe"))
+
+    def test_first_project_runs_through_the_extend_skill(self):
+        self.assertIn("first project", self.skill)
+        self.assertIn("extend/SKILL.md", self.skill)
+        self.assertIn("projects/<key>/PROJECT.md", self.skill)
+
+    def test_verify_runs_generator_and_check(self):
+        verify = self.section("## Verify")
+        self.assertIn("tools/generate.py", verify)
+        self.assertIn("tools/check.py", verify)
+
+    def test_handoff_reports_trackers_and_project(self):
+        handoff = self.section("## Hand-off")
+        self.assertIn("trackers", handoff)
+        self.assertIn("project", handoff)
+
+
 if __name__ == "__main__":
     unittest.main()

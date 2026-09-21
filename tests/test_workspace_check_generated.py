@@ -5,6 +5,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "kits/workspace/tools"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import datetime
 import json
 import tempfile
 import unittest
@@ -158,21 +159,22 @@ UI_MIGRATION = {
     },
 }
 
-MAP_MD = "domains/operations/MAP.md"
-BREAKDOWN_MD = "domains/operations/streams/main/BREAKDOWN.md"
+MAP_MD = "projects/abs/domains/operations/MAP.md"
+STREAM_REL = "projects/abs/domains/operations/streams/main"
+BREAKDOWN_MD = STREAM_REL + "/BREAKDOWN.md"
 
 
 def screen(slug, route, wave):
     return (
-        "---\nkey: screen:operations/%s\nroute: %s\nkind: place\nsection: Operations\nparent:\n"
+        "---\nkey: screen:abs/operations/%s\nroute: %s\nkind: place\nsection: Operations\nparent:\n"
         "access: op\nlabel: %s\nwave: %d\nstory:\n---\n# %s\n\n## Transitions\n\n"
-        "| Action | Target |\n|---|---|\n| Back | screen:operations/list |\n"
+        "| Action | Target |\n|---|---|\n| Back | screen:abs/operations/list |\n"
     ) % (slug, route, slug, wave, slug)
 
 
 def story(slug, wave):
     return (
-        "---\nkey: story:operations/%s\ntype: story\nwave: %d\ntracker:\nscope: [screen:operations/list]\n"
+        "---\nkey: story:abs/operations/%s\ntype: story\nwave: %d\ntracker:\nscope: [screen:abs/operations/list]\n"
         "depends: []\nrepos: []\ndecisions: []\nmockups: []\n---\n# %s\n\n## Goal\n\n%s.\n"
     ) % (slug, wave, slug, slug)
 
@@ -183,13 +185,13 @@ class CheckGeneratedMapsTest(unittest.TestCase):
         self.write(".agents/profiles/ui-migration/profile.json", json.dumps(UI_MIGRATION, indent=2) + "\n")
         template = (self.ws / ".agents/profiles/ui-migration/MAP.md").read_text(encoding="utf-8")
         self.write(MAP_MD, template.replace("<domain>", "operations"))
-        self.write("domains/operations/map/list.md", screen("list", "/operations", 1))
+        self.write("projects/abs/domains/operations/map/list.md", screen("list", "/operations", 1))
         stream = {
-            "key": "stream:operations/main", "profile": "ui-migration", "stage": "goal",
+            "key": "stream:abs/operations/main", "profile": "ui-migration", "stage": "goal",
             "scope": [], "approvals": [],
         }
-        self.write("domains/operations/streams/main/stream.json", json.dumps(stream, indent=2) + "\n")
-        self.write("domains/operations/streams/main/stories/documents/story.md", story("documents", 1))
+        self.write(STREAM_REL + "/stream.json", json.dumps(stream, indent=2) + "\n")
+        self.write(STREAM_REL + "/stories/documents/story.md", story("documents", 1))
         result = run_generate(self.ws)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.findings(), [])
@@ -203,14 +205,12 @@ class CheckGeneratedMapsTest(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
 
-    def test_added_screen_makes_map_stale(self):
+    def test_leftover_map_row_makes_map_stale(self):
+        # Element tables render between the markers; a leftover hand row is a stale generated table.
         map_lines = (self.ws / MAP_MD).read_text(encoding="utf-8").split("\n")
-        # card sorts before list, so its row takes the line of the list row.
-        list_row = next(
-            (i for i, line in enumerate(map_lines) if line.startswith("| screen:operations/list | /")), None)
-        self.assertIsNotNone(list_row, map_lines)
-        expected_line = list_row + 1
-        self.write("domains/operations/map/card.md", screen("card", "/operations/:id", 1))
+        expected_line = map_lines.index("<!-- map:screens:begin -->") + 3  # after the two header lines
+        map_lines.insert(expected_line - 1, "| stale | row |")
+        self.write(MAP_MD, "\n".join(map_lines))
         lines = self.findings()
         self.assertEqual(len(lines), 1, lines)
         self.assertTrue(lines[0].startswith("%s:%d generated-stale " % (MAP_MD, expected_line)), lines)
@@ -220,7 +220,7 @@ class CheckGeneratedMapsTest(unittest.TestCase):
     def test_added_story_makes_breakdown_stale(self):
         # The new row replaces the empty string after the final newline, so it is the line past the last row.
         expected_line = len((self.ws / BREAKDOWN_MD).read_text(encoding="utf-8").split("\n"))
-        self.write("domains/operations/streams/main/stories/reports/story.md", story("reports", 2))
+        self.write(STREAM_REL + "/stories/reports/story.md", story("reports", 2))
         lines = self.findings()
         # A new story key is also an alias, so the index goes stale together with the breakdown.
         self.assertEqual(len(lines), 2, lines)
@@ -229,11 +229,108 @@ class CheckGeneratedMapsTest(unittest.TestCase):
         self.assert_fixed_by_generate()
 
     def test_generate_clears_stale_map_and_breakdown(self):
-        self.write("domains/operations/map/card.md", screen("card", "/operations/:id", 1))
-        self.write("domains/operations/streams/main/stories/reports/story.md", story("reports", 2))
+        map_lines = (self.ws / MAP_MD).read_text(encoding="utf-8").split("\n")
+        stale = map_lines.index("<!-- map:screens:begin -->") + 2
+        map_lines.insert(stale, "| stale | row |")
+        self.write(MAP_MD, "\n".join(map_lines))
+        self.write(STREAM_REL + "/stories/reports/story.md", story("reports", 2))
         paths = sorted(line.split(":", 1)[0] for line in self.findings())
         self.assertEqual(paths, [".agents/index.json", MAP_MD, BREAKDOWN_MD])
         self.assert_fixed_by_generate()
+
+
+STATUS_MD = """# Status
+
+Hand-written intro.
+
+<!-- status:in-progress:begin -->
+old
+<!-- status:in-progress:end -->
+
+<!-- status:waiting:begin -->
+old
+<!-- status:waiting:end -->
+
+<!-- status:done-recently:begin -->
+old
+<!-- status:done-recently:end -->
+
+<!-- status:drift:begin -->
+old
+<!-- status:drift:end -->
+
+Tail.
+"""
+
+STATUS_STORY_REL = "projects/abs/domains/operations/streams/arm/stories/card/story.md"
+
+
+class CheckGeneratedStatusTest(unittest.TestCase):
+    def setUp(self):
+        CheckGeneratedTest.setUp(self)
+        self.write("STATUS.md", STATUS_MD)
+        self.write(STATUS_STORY_REL, self.story())
+        result = run_generate(self.ws)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.findings(), [])
+
+    tearDown = CheckGeneratedTest.tearDown
+    findings = CheckGeneratedTest.findings
+    assert_fixed_by_generate = CheckGeneratedTest.assert_fixed_by_generate
+
+    def write(self, rel, text):
+        path = self.ws / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def story(self, status="waiting", owner="", started=""):
+        fields = ["key: story:abs/operations/card", "type: story", "status: %s" % status]
+        if owner:
+            fields.append("owner: %s" % owner)
+        if started:
+            fields.append("started: %s" % started)
+        return "---\n%s\n---\n# Card\n\n## Goal\n\nx.\n" % "\n".join(fields)
+
+    def test_unregenerated_flip_makes_status_stale(self):
+        today = datetime.date.today().isoformat()
+        self.write(STATUS_STORY_REL, self.story("in_progress", "anna", today))
+        lines = self.findings()
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("STATUS.md:"), lines)
+        self.assertIn("differs from generator output; run python3 tools/generate.py", lines[0])
+        self.assert_fixed_by_generate()
+
+    def test_status_with_partial_markers_is_stale(self):
+        text = (self.ws / "STATUS.md").read_text(encoding="utf-8")
+        self.write(
+            "STATUS.md",
+            text.replace("<!-- status:drift:begin -->\n", "").replace("<!-- status:drift:end -->\n", ""),
+        )
+        lines = self.findings()
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("STATUS.md:1 generated-stale "), lines)
+        self.assertIn("status section markers missing", lines[0])
+        # The generator cannot restore a lost marker pair; writing the markers back clears it.
+        self.write("STATUS.md", STATUS_MD)
+        self.assert_fixed_by_generate()
+
+    def test_status_with_missing_end_marker_is_stale(self):
+        # A lost end marker alone must be flagged: the section can never be regenerated,
+        # so a flip inside it would otherwise stay invisible to the freshness rule.
+        text = (self.ws / "STATUS.md").read_text(encoding="utf-8")
+        self.write("STATUS.md", text.replace("<!-- status:in-progress:end -->\n", ""))
+        lines = self.findings()
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("STATUS.md:1 generated-stale "), lines)
+        self.assertIn("status section markers missing", lines[0])
+        # The generator cannot restore a lost marker; writing it back clears the finding.
+        self.write("STATUS.md", STATUS_MD)
+        self.assert_fixed_by_generate()
+
+    def test_status_without_markers_is_not_generated(self):
+        # Pre-marker files stay plain hand text; only the layout rule requires the file itself.
+        self.write("STATUS.md", "# Status\n\n## In progress\n\nNone.\n")
+        self.assertEqual(self.findings(), [])
 
 
 class FirstDiffLineTest(unittest.TestCase):

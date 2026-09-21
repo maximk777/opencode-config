@@ -29,8 +29,8 @@ STORY_BODY = (
 MAP_DOC = (
     "# Map of operations\n\n<!-- map:screens:begin -->\n<!-- map:screens:end -->\n\n"
     "## Legacy trace\n\n| Legacy group | Legacy item | Legacy route | Target |\n|---|---|---|---|\n"
-    "| g | documents | /docs | screen:operations/documents |\n"
-    "| g | report | /report | screen:operations/report |\n"
+    "| g | documents | /docs | screen:operations/operations/documents |\n"
+    "| g | report | /report | screen:operations/operations/report |\n"
 )
 
 RAISING_REMAINING = '''
@@ -42,7 +42,7 @@ def remaining(ctx):
 
 def screen(slug, story=""):
     return (
-        "---\nkey: screen:operations/%s\nroute: /%s\nkind: place\nsection: s\nparent:\naccess: a\n"
+        "---\nkey: screen:operations/operations/%s\nroute: /%s\nkind: place\nsection: s\nparent:\naccess: a\n"
         "label: L\nwave: 1\nstory:%s\n---\n\n## Transitions\n\n| Action | Target |\n|---|---|\n"
         % (slug, slug, " " + story if story else "")
     )
@@ -50,7 +50,7 @@ def screen(slug, story=""):
 
 def ui_story(slug, scope):
     return (
-        "---\nkey: story:operations/%s\ntype: story\nwave: 1\ntracker:\nscope: [%s]\ndepends: []\n"
+        "---\nkey: story:operations/operations/%s\ntype: story\nwave: 1\ntracker:\nscope: [%s]\ndepends: []\n"
         "repos: []\ndecisions: []\nmockups: []\n---\n%s" % (slug, ", ".join(scope), STORY_BODY)
     )
 
@@ -166,24 +166,28 @@ class RemainingOption(unittest.TestCase):
         self.assertFalse(any(" json-shape " in line for line in lines), lines)
 
     def test_uncovered_screen_listed(self):
-        self.write("domains/operations/map/documents.md", screen("documents", "story:operations/documents"))
-        self.write("domains/operations/map/report.md", screen("report"))
-        self.write("domains/operations/MAP.md", MAP_DOC)
-        self.write("domains/operations/streams/s/epic.md", EPIC)
-        self.write("domains/operations/streams/s/stream.json", json.dumps({
-            "key": "stream:operations/s",
+        # Domain operations of project operations, at stage decomposition: the report screen is in the
+        # stream scope but in no story's scope.
+        domain = "projects/operations/domains/operations"
+        self.write(domain + "/map/documents.md", screen("documents", "story:operations/operations/documents"))
+        self.write(domain + "/map/report.md", screen("report"))
+        self.write(domain + "/MAP.md", MAP_DOC)
+        self.write(domain + "/streams/s/epic.md", EPIC)
+        self.write(domain + "/streams/s/stream.json", json.dumps({
+            "key": "stream:operations/operations/s",
             "profile": "ui-migration",
             "stage": "decomposition",
-            "scope": ["screen:operations/documents", "screen:operations/report"],
+            "scope": ["screen:operations/operations/documents", "screen:operations/operations/report"],
             "approvals": approvals("goal", "map"),
         }) + "\n")
-        self.write("domains/operations/streams/s/stories/documents/story.md",
-                   ui_story("documents", ["screen:operations/documents"]))
+        self.write(domain + "/streams/s/stories/documents/story.md",
+                   ui_story("documents", ["screen:operations/operations/documents"]))
         code, lines, stderr = run_check_args(self.ws, "--remaining")
         self.assertEqual(code, 0, (lines, stderr))
-        coverage = [l for l in lines if l.startswith("stream:operations/s decomposition two_way_coverage: ")]
+        coverage = [l for l in lines
+                    if l.startswith("stream:operations/operations/s decomposition two_way_coverage: ")]
         self.assertEqual(len(coverage), 1, lines)
-        self.assertIn("screen:operations/report", coverage[0])
+        self.assertIn("screen:operations/operations/report", coverage[0])
 
     def test_outside_workspace_exits_2(self):
         empty = self.tmp / "empty"

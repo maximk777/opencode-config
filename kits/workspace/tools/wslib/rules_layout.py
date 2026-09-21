@@ -14,7 +14,8 @@ REQUIRED = [
     "repos.json",
     "REPOSITORIES.md",
     "environments.json",
-    "tracker/tracker.json",
+    "STATUS.md",
+    "tracker/trackers.json",
     ".gitignore",
     ".agents/kit.json",
     ".agents/env.schema.json",
@@ -32,11 +33,22 @@ VARIABLE_RE = re.compile(r"[A-Z][A-Z0-9_]*")
 
 def check_layout(ctx: Context) -> List[Finding]:
     present = set(ctx.files)
-    return [
+    findings = [
         Finding(path, 1, "layout", "required file is missing or ignored by git")
         for path in REQUIRED
         if path not in present
     ]
+    # Directory names only appear in ctx.files when the project holds at least one tracked file;
+    # a file directly under projects/ is a stray file, not a project directory.
+    projects = {
+        rel.split("/")[1] for rel in ctx.files if rel.startswith("projects/") and "/" in rel[len("projects/"):]
+    }
+    findings.extend(
+        Finding("projects/%s/PROJECT.md" % name, 1, "layout", "required file is missing or ignored by git")
+        for name in sorted(projects)
+        if "projects/%s/PROJECT.md" % name not in present
+    )
+    return findings
 
 
 def _is_cell(value) -> bool:
@@ -83,9 +95,6 @@ def _repos(ctx: Context, rel: str, data) -> List[Finding]:
                 bad("%s must be a non-empty string without | or line breaks" % field)
         if entry.get("forge") not in FORGES:
             bad("forge must be one of %s" % ", ".join(FORGES))
-        roles = entry.get("roles")
-        if not isinstance(roles, list) or not all(_is_cell(role) for role in roles):
-            bad("roles must be a list of non-empty strings without | or line breaks")
         for field, seen in (("name", names), ("remote", remotes)):
             value = entry.get(field)
             if not isinstance(value, str) or value == "":
@@ -145,22 +154,35 @@ def _env_schema(ctx: Context, rel: str, data) -> List[Finding]:
     return findings
 
 
-def _tracker(ctx: Context, rel: str, data) -> List[Finding]:
-    if not isinstance(data, dict):
-        return [Finding(rel, 1, "json-shape", "expected an object")]
+def _trackers(ctx: Context, rel: str, data) -> List[Finding]:
+    if not isinstance(data, dict) or not isinstance(data.get("trackers"), list) or not data["trackers"]:
+        return [Finding(rel, 1, "json-shape", "expected an object with a non-empty list trackers")]
     findings = []
-    pattern = data.get("id_pattern")
-    if not isinstance(pattern, str):
-        findings.append(Finding(rel, 1, "json-shape", "id_pattern must be a string"))
-    else:
-        try:
-            re.compile(pattern)
-        # Huge repeat counts or deep nesting raise these instead of re.error.
-        except (re.error, OverflowError, RecursionError, ValueError) as exc:
-            findings.append(Finding(rel, 1, "json-shape", "id_pattern does not compile: %s" % exc))
-    url = data.get("url")
-    if not isinstance(url, str) or "{id}" not in url:
-        findings.append(Finding(rel, 1, "json-shape", "url must be a string containing {id}"))
+    keys: Dict[str, int] = {}
+    for index, tracker in enumerate(data["trackers"]):
+        if not isinstance(tracker, dict):
+            findings.append(Finding(rel, 1, "json-shape", "trackers[%d] is not an object" % index))
+            continue
+        label = "trackers[%d]" % index
+        key = tracker.get("key")
+        if not isinstance(key, str) or key == "":
+            findings.append(Finding(rel, 1, "json-shape", "%s key must be a non-empty string" % label))
+        elif key in keys:
+            findings.append(Finding(rel, 1, "json-shape", "%s duplicate key %s" % (label, key)))
+        else:
+            keys[key] = index
+        pattern = tracker.get("id_pattern")
+        if not isinstance(pattern, str):
+            findings.append(Finding(rel, 1, "json-shape", "%s id_pattern must be a string" % label))
+        else:
+            try:
+                re.compile(pattern)
+            # Huge repeat counts or deep nesting raise these instead of re.error.
+            except (re.error, OverflowError, RecursionError, ValueError) as exc:
+                findings.append(Finding(rel, 1, "json-shape", "%s id_pattern does not compile: %s" % (label, exc)))
+        url = tracker.get("url")
+        if not isinstance(url, str) or "{id}" not in url:
+            findings.append(Finding(rel, 1, "json-shape", "%s url must be a string containing {id}" % label))
     return findings
 
 
@@ -185,7 +207,7 @@ SHAPES: Dict[str, Callable[[Context, str, object], List[Finding]]] = {
     "repos.json": _repos,
     "environments.json": _environments,
     ".agents/env.schema.json": _env_schema,
-    "tracker/tracker.json": _tracker,
+    "tracker/trackers.json": _trackers,
     ".agents/kit.json": _kit,
 }
 

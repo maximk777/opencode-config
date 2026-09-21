@@ -1,0 +1,24 @@
+{
+  "repositories": [
+    {
+      "name": "cards-front",
+      "remote": "git@gitlab.example:demo/cards-front.git",
+      "forge": "gitlab",
+      "default_branch": "main",
+      "roles": [
+        "frontend"
+      ],
+      "summary": "Frontend of the demo sections"
+    },
+    {
+      "name": "cards-bff",
+      "remote": "git@gitlab.example:demo/cards-bff.git",
+      "forge": "gitlab",
+      "default_branch": "main",
+      "roles": [
+        "backend"
+      ],
+      "summary": "BFF of the demo sections"
+    }
+  ]
+}

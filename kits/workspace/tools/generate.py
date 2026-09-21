@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate adapters, the repository table, the alias index, map tables and breakdowns of a workspace."""
+"""Regenerate adapters, the repository table, the alias index, map tables, breakdowns and status sections of a workspace."""
 import os
 import shutil
 import sys
@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from pathlib import Path  # noqa: E402
 
-from wslib import common, gen_adapters, gen_maps, gen_tables  # noqa: E402
+from wslib import common, gen_adapters, gen_maps, gen_status, gen_tables  # noqa: E402
 
 
 def render_all(root):
@@ -16,6 +16,7 @@ def render_all(root):
     out.update(gen_adapters.render(root))
     out.update(gen_tables.render(root))
     out.update(gen_maps.render(root))
+    out.update(gen_status.render(root))
     return out
 
 

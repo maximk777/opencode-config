@@ -12,7 +12,7 @@ import tempfile
 import unittest
 
 from wslib.common import Context
-from wslib.model import Element, Story, Stream, Workspace
+from wslib.model import Element, Story, Stream, Task, Workspace
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures/profiles/checklist/profile.json"
 
@@ -30,8 +30,8 @@ UI_MIGRATION = {
         }
     ],
     "story": {
-        "fields": ["key", "type", "wave", "tracker", "scope", "depends", "repos", "decisions", "mockups"],
-        "may_be_empty": ["tracker", "scope", "depends", "repos", "decisions", "mockups"],
+        "fields": ["key", "type", "status", "owner", "started", "wave", "tracker", "scope", "depends", "repos", "decisions", "mockups"],
+        "may_be_empty": ["status", "owner", "started", "tracker", "scope", "depends", "repos", "decisions", "mockups"],
         "values": {"type": ["story"]},
         "sections": ["Goal", "Scope", "Acceptance criteria", "Verification", "Out of scope", "Open questions"],
     },
@@ -63,7 +63,7 @@ UI_MIGRATION = {
 }
 
 SCREEN_LIST = """---
-key: screen:operations/list
+key: screen:abs/operations/list
 route: /operations
 kind: place
 section: Operations
@@ -79,20 +79,20 @@ story:
 
 | Action | Target |
 |---|---|
-| Open | screen:operations/card |
-| Back | screen:clients/home |
+| Open | screen:abs/operations/card |
+| Back | screen:abs/clients/home |
 """
 
 SCREEN_CARD = """---
-key: screen:operations/card
+key: screen:abs/operations/card
 route: /operations/:id
 kind: place
 section: Operations
-parent: screen:operations/list
+parent: screen:abs/operations/list
 access: getOperation
 label: Operation
 wave: 1
-story: story:operations/card
+story: story:abs/operations/card
 ---
 # Operation card
 
@@ -102,11 +102,14 @@ No table here.
 """
 
 STORY = """---
-key: story:operations/card
+key: story:abs/operations/card
 type: story
+status: waiting
+owner:
+started:
 wave: 1
 tracker: TASK-1
-scope: [screen:operations/card]
+scope: [screen:abs/operations/card]
 depends: []
 repos: []
 decisions: []
@@ -123,10 +126,32 @@ Show a card.
 None.
 """
 
+TASK = """---
+key: task:e2e-checkout
+type: e2e
+status: waiting
+owner:
+started:
+tracker:
+---
+# E2E checkout
 
-def stream_json(domain, stream, profile="ui-migration", **extra):
+## Goal
+
+Check the checkout flow.
+"""
+
+TRACKERS = {
+    "trackers": [
+        {"key": "jira", "id_pattern": r"TASK-\d+", "url": "https://jira/{id}"},
+        {"key": "youtrack", "id_pattern": r"YT-\d+", "url": "https://yt/{id}"},
+    ]
+}
+
+
+def stream_json(project, domain, stream, profile="ui-migration", **extra):
     data = {
-        "key": "stream:%s/%s" % (domain, stream),
+        "key": "stream:%s/%s/%s" % (project, domain, stream),
         "profile": profile,
         "stage": "goal",
         "scope": [],
@@ -169,7 +194,7 @@ class ProfilesTest(ModelTestCase):
         data = json.loads(FIXTURE.read_text(encoding="utf-8"))
         data["stages"]["map"].append({"gate": "magic_gate"})
         self.write(".agents/profiles/checklist/profile.json", json.dumps(data) + "\n")
-        self.write("domains/ops/rules/r1.md", "---\nkey: rule:ops/r1\nowner: me\nstory:\n---\n")
+        self.write("projects/abs/domains/ops/rules/r1.md", "---\nkey: rule:abs/ops/r1\nowner: me\nstory:\n---\n")
         ws = self.workspace()
         self.assertEqual(sorted(ws.profiles), ["ui-migration"])
         self.assertTrue(ws.profile_findings)
@@ -179,68 +204,87 @@ class ProfilesTest(ModelTestCase):
 
 
 class ElementsTest(ModelTestCase):
-    def test_elements_per_kind_and_domain(self):
-        self.write("domains/operations/map/list.md", SCREEN_LIST)
-        self.write("domains/operations/map/card.md", SCREEN_CARD)
-        self.write("domains/clients/map/home.md", "---\nkey: screen:clients/home\n---\n# Home\n")
-        self.write("domains/ops/rules/r1.md", "---\nkey: rule:ops/r1\nowner: me\nstory:\n---\n# R1\n")
+    def test_elements_per_project_kind_and_domain(self):
+        self.write("projects/abs/domains/operations/map/list.md", SCREEN_LIST)
+        self.write("projects/abs/domains/operations/map/card.md", SCREEN_CARD)
+        self.write("projects/abs/domains/clients/map/home.md", "---\nkey: screen:abs/clients/home\n---\n# Home\n")
+        self.write("projects/abs/domains/ops/rules/r1.md", "---\nkey: rule:abs/ops/r1\nowner: me\nstory:\n---\n# R1\n")
         ws = self.workspace()
         self.assertEqual(
             sorted(ws.elements),
-            ["rule:ops/r1", "screen:clients/home", "screen:operations/card", "screen:operations/list"],
+            [
+                "rule:abs/ops/r1",
+                "screen:abs/clients/home",
+                "screen:abs/operations/card",
+                "screen:abs/operations/list",
+            ],
         )
         self.assertEqual(len(ws.element_list), 4)
 
-        card = ws.elements["screen:operations/card"]
+        card = ws.elements["screen:abs/operations/card"]
         self.assertIsInstance(card, Element)
         self.assertEqual(
-            (card.key, card.kind, card.domain, card.slug, card.path, card.error),
-            ("screen:operations/card", "screen", "operations", "card", "domains/operations/map/card.md", None),
+            (card.key, card.kind, card.project, card.domain, card.slug, card.path, card.error),
+            (
+                "screen:abs/operations/card",
+                "screen",
+                "abs",
+                "operations",
+                "card",
+                "projects/abs/domains/operations/map/card.md",
+                None,
+            ),
         )
-        self.assertEqual(card.fields["parent"], "screen:operations/list")
-        self.assertEqual(card.fields["story"], "story:operations/card")
+        self.assertEqual(card.fields["parent"], "screen:abs/operations/list")
+        self.assertEqual(card.fields["story"], "story:abs/operations/card")
         self.assertEqual(card.tables["Transitions"], (None, [], None))
 
-        rule = ws.elements["rule:ops/r1"]
-        self.assertEqual((rule.kind, rule.domain, rule.slug), ("rule", "ops", "r1"))
-        self.assertEqual(rule.fields, {"key": "rule:ops/r1", "owner": "me", "story": ""})
+        rule = ws.elements["rule:abs/ops/r1"]
+        self.assertEqual((rule.kind, rule.project, rule.domain, rule.slug), ("rule", "abs", "ops", "r1"))
+        self.assertEqual(rule.fields, {"key": "rule:abs/ops/r1", "owner": "me", "story": ""})
         self.assertEqual(rule.tables, {"Checks": (None, [], None)})
 
     def test_tables_parsed_with_file_lines(self):
-        self.write("domains/operations/map/list.md", SCREEN_LIST)
+        self.write("projects/abs/domains/operations/map/list.md", SCREEN_LIST)
         ws = self.workspace()
-        columns, rows, error = ws.elements["screen:operations/list"].tables["Transitions"]
+        columns, rows, error = ws.elements["screen:abs/operations/list"].tables["Transitions"]
         self.assertEqual(columns, ["Action", "Target"])
         self.assertIsNone(error)
         lines = SCREEN_LIST.split("\n")
-        self.assertEqual(lines[rows[0][0] - 1], "| Open | screen:operations/card |")
+        self.assertEqual(lines[rows[0][0] - 1], "| Open | screen:abs/operations/card |")
         self.assertEqual(
             rows,
             [
-                (rows[0][0], ["Open", "screen:operations/card"]),
-                (rows[0][0] + 1, ["Back", "screen:clients/home"]),
+                (rows[0][0], ["Open", "screen:abs/operations/card"]),
+                (rows[0][0] + 1, ["Back", "screen:abs/clients/home"]),
             ],
         )
 
     def test_key_from_path_not_frontmatter(self):
-        self.write("domains/operations/map/list.md", SCREEN_LIST.replace("screen:operations/list", "screen:x/y", 1))
+        self.write(
+            "projects/abs/domains/operations/map/list.md",
+            SCREEN_LIST.replace("screen:abs/operations/list", "screen:x/y", 1),
+        )
         ws = self.workspace()
-        element = ws.elements["screen:operations/list"]
+        element = ws.elements["screen:abs/operations/list"]
         self.assertEqual(element.fields["key"], "screen:x/y")
         self.assertNotIn("screen:x/y", ws.elements)
 
     def test_frontmatter_error_kept(self):
-        self.write("domains/operations/map/bad.md", "---\nkey: screen:operations/bad\n\nroute: /bad\n---\n")
+        self.write(
+            "projects/abs/domains/operations/map/bad.md",
+            "---\nkey: screen:abs/operations/bad\n\nroute: /bad\n---\n",
+        )
         ws = self.workspace()
-        bad = ws.elements["screen:operations/bad"]
+        bad = ws.elements["screen:abs/operations/bad"]
         self.assertIsNone(bad.fields)
         self.assertIn("blank line", bad.error)
 
     def test_missing_frontmatter_is_error(self):
-        self.write("domains/operations/map/plain.md", "# Plain\n")
-        self.write("domains/operations/map/empty.md", "")
+        self.write("projects/abs/domains/operations/map/plain.md", "# Plain\n")
+        self.write("projects/abs/domains/operations/map/empty.md", "")
         ws = self.workspace()
-        for key in ("screen:operations/plain", "screen:operations/empty"):
+        for key in ("screen:abs/operations/plain", "screen:abs/operations/empty"):
             element = ws.elements[key]
             self.assertIsNone(element.fields, key)
             self.assertEqual(element.error, "missing frontmatter", key)
@@ -249,10 +293,10 @@ class ElementsTest(ModelTestCase):
         data = json.loads(FIXTURE.read_text(encoding="utf-8"))
         data["elements"][0]["dir"] = "map"
         self.write(".agents/profiles/checklist/profile.json", json.dumps(data) + "\n")
-        self.write("domains/operations/map/list.md", SCREEN_LIST)
+        self.write("projects/abs/domains/operations/map/list.md", SCREEN_LIST)
         ws = self.workspace()
         self.assertEqual(sorted(ws.profiles), ["checklist", "ui-migration"])
-        self.assertEqual(list(ws.elements), ["rule:operations/list"])
+        self.assertEqual(list(ws.elements), ["rule:abs/operations/list"])
         self.assertEqual([e.kind for e in ws.element_list], ["rule"])
         self.assertEqual(len(ws.profile_findings), 1)
         finding = ws.profile_findings[0]
@@ -267,9 +311,9 @@ class ElementsTest(ModelTestCase):
         dup = dict(UI_MIGRATION["elements"][0], kind="view", prefix="view")
         profile = dict(UI_MIGRATION, elements=UI_MIGRATION["elements"] + [dup])
         self.write(".agents/profiles/ui-migration/profile.json", json.dumps(profile) + "\n")
-        self.write("domains/operations/map/list.md", SCREEN_LIST)
+        self.write("projects/abs/domains/operations/map/list.md", SCREEN_LIST)
         ws = self.workspace()
-        self.assertEqual(list(ws.elements), ["screen:operations/list"])
+        self.assertEqual(list(ws.elements), ["screen:abs/operations/list"])
         self.assertEqual(len(ws.element_list), 1)
         self.assertEqual(len(ws.profile_findings), 1)
         finding = ws.profile_findings[0]
@@ -294,32 +338,41 @@ class ElementsTest(ModelTestCase):
         dup = dict(UI_MIGRATION["elements"][0], kind="view", dir="views")
         profile = dict(UI_MIGRATION, elements=UI_MIGRATION["elements"] + [dup])
         self.write(".agents/profiles/ui-migration/profile.json", json.dumps(profile) + "\n")
-        self.write("domains/operations/map/list.md", SCREEN_LIST)
-        self.write("domains/operations/views/list.md", "---\nkey: screen:operations/list\n---\n")
+        self.write("projects/abs/domains/operations/map/list.md", SCREEN_LIST)
+        self.write("projects/abs/domains/operations/views/list.md", "---\nkey: screen:abs/operations/list\n---\n")
         ws = self.workspace()
-        self.assertEqual(ws.elements["screen:operations/list"].path, "domains/operations/map/list.md")
+        self.assertEqual(ws.elements["screen:abs/operations/list"].path, "projects/abs/domains/operations/map/list.md")
         self.assertEqual(
             [e.path for e in ws.element_list],
-            ["domains/operations/map/list.md", "domains/operations/views/list.md"],
+            [
+                "projects/abs/domains/operations/map/list.md",
+                "projects/abs/domains/operations/views/list.md",
+            ],
         )
 
     def test_only_direct_md_files_of_element_dir(self):
-        self.write("domains/operations/map/list.md", SCREEN_LIST)
-        self.write("domains/operations/map/notes.txt", "x\n")
-        self.write("domains/operations/map/deep/inner.md", "---\nkey: screen:operations/inner\n---\n")
-        self.write("domains/operations/MAP.md", "# Map\n")
+        self.write("projects/abs/domains/operations/map/list.md", SCREEN_LIST)
+        self.write("projects/abs/domains/operations/map/notes.txt", "x\n")
+        self.write(
+            "projects/abs/domains/operations/map/deep/inner.md",
+            "---\nkey: screen:abs/operations/inner\n---\n",
+        )
+        self.write("projects/abs/domains/operations/MAP.md", "# Map\n")
         self.write("map/top.md", "---\nkey: screen:top\n---\n")
         ws = self.workspace()
-        self.assertEqual(list(ws.elements), ["screen:operations/list"])
+        self.assertEqual(list(ws.elements), ["screen:abs/operations/list"])
 
 
 class StreamsTest(ModelTestCase):
     def test_stream_with_stories(self):
-        base = "domains/operations/streams/arm"
-        self.write(base + "/stream.json", stream_json("operations", "arm", scope=["screen:operations/card"]))
+        base = "projects/abs/domains/operations/streams/arm"
+        self.write(base + "/stream.json", stream_json("abs", "operations", "arm", scope=["screen:abs/operations/card"]))
         self.write(base + "/epic.md", "# Epic\n")
         self.write(base + "/stories/card/story.md", STORY)
-        self.write(base + "/stories/list/story.md", "---\nkey: story:operations/list\nscope: [\n---\n")
+        self.write(
+            base + "/stories/list/story.md",
+            "---\nkey: story:abs/operations/list\nscope: [\n---\n",
+        )
         self.write(base + "/stories/card/notes.md", "# Notes\n")
         self.write(base + "/stories/stray.md", "# Stray\n")
         ws = self.workspace()
@@ -327,9 +380,19 @@ class StreamsTest(ModelTestCase):
         stream = ws.streams[0]
         self.assertIsInstance(stream, Stream)
         self.assertEqual(
-            (stream.key, stream.domain, stream.name, stream.path, stream.error, stream.profile_name, stream.epic_path),
             (
-                "stream:operations/arm",
+                stream.key,
+                stream.project,
+                stream.domain,
+                stream.name,
+                stream.path,
+                stream.error,
+                stream.profile_name,
+                stream.epic_path,
+            ),
+            (
+                "stream:abs/operations/arm",
+                "abs",
                 "operations",
                 "arm",
                 base + "/stream.json",
@@ -338,14 +401,25 @@ class StreamsTest(ModelTestCase):
                 base + "/epic.md",
             ),
         )
-        self.assertEqual(stream.data["scope"], ["screen:operations/card"])
-        self.assertEqual(sorted(stream.stories), ["story:operations/card", "story:operations/list"])
+        self.assertEqual(stream.data["scope"], ["screen:abs/operations/card"])
+        self.assertEqual(
+            sorted(stream.stories),
+            ["story:abs/operations/card", "story:abs/operations/list"],
+        )
 
-        card = stream.stories["story:operations/card"]
+        card = stream.stories["story:abs/operations/card"]
         self.assertIsInstance(card, Story)
         self.assertEqual(
-            (card.key, card.domain, card.stream, card.slug, card.path, card.error),
-            ("story:operations/card", "operations", "arm", "card", base + "/stories/card/story.md", None),
+            (card.key, card.project, card.domain, card.stream, card.slug, card.path, card.error),
+            (
+                "story:abs/operations/card",
+                "abs",
+                "operations",
+                "arm",
+                "card",
+                base + "/stories/card/story.md",
+                None,
+            ),
         )
         self.assertEqual(card.fields["tracker"], "TASK-1")
         self.assertEqual([heading for _, heading, _ in card.sections], ["Goal", "Open questions"])
@@ -353,144 +427,236 @@ class StreamsTest(ModelTestCase):
         self.assertEqual(STORY.split("\n")[line - 1], "## Open questions")
         self.assertEqual(text.strip(), "None.")
 
-        broken = stream.stories["story:operations/list"]
+        broken = stream.stories["story:abs/operations/list"]
         self.assertIsNone(broken.fields)
         self.assertIn("unclosed [", broken.error)
 
     def test_epic_path_given_when_absent(self):
-        self.write("domains/ops/streams/s1/stream.json", stream_json("ops", "s1", profile="checklist"))
+        self.write("projects/abs/domains/ops/streams/s1/stream.json", stream_json("abs", "ops", "s1", profile="checklist"))
         ws = self.workspace()
-        self.assertEqual(ws.streams[0].epic_path, "domains/ops/streams/s1/epic.md")
+        self.assertEqual(ws.streams[0].epic_path, "projects/abs/domains/ops/streams/s1/epic.md")
         self.assertEqual(ws.streams[0].stories, {})
 
     def test_invalid_json_kept_as_lifecycle_error(self):
-        rel = "domains/ops/streams/s1/stream.json"
-        self.write(rel, '{"key": "stream:ops/s1",\n"profile": \n')
-        self.write("domains/ops/streams/s1/stories/a/story.md", "---\nkey: story:ops/a\n---\n")
+        rel = "projects/abs/domains/ops/streams/s1/stream.json"
+        self.write(rel, '{"key": "stream:abs/ops/s1",\n"profile": \n')
+        self.write("projects/abs/domains/ops/streams/s1/stories/a/story.md", "---\nkey: story:abs/ops/a\n---\n")
         ws = self.workspace()
         stream = ws.streams[0]
         self.assertIsNone(stream.data)
         self.assertIsNone(stream.profile_name)
         self.assertEqual((stream.error.path, stream.error.rule), (rel, "lifecycle"))
         self.assertIsInstance(stream.error.line, int)
-        self.assertEqual(list(stream.stories), ["story:ops/a"])
+        self.assertEqual(list(stream.stories), ["story:abs/ops/a"])
 
     def test_non_object_json_kept_as_lifecycle_error(self):
-        rel = "domains/ops/streams/s1/stream.json"
+        rel = "projects/abs/domains/ops/streams/s1/stream.json"
         self.write(rel, "[]\n")
         stream = self.workspace().streams[0]
         self.assertIsNone(stream.data)
         self.assertEqual((stream.error.path, stream.error.line, stream.error.rule), (rel, 1, "lifecycle"))
 
     def test_non_string_profile_gives_no_profile_name(self):
-        self.write("domains/ops/streams/s1/stream.json", stream_json("ops", "s1", profile=["checklist"]))
+        self.write("projects/abs/domains/ops/streams/s1/stream.json", stream_json("abs", "ops", "s1", profile=["checklist"]))
         stream = self.workspace().streams[0]
         self.assertIsNone(stream.error)
         self.assertIsNone(stream.profile_name)
 
     def test_stories_across_streams_first_wins(self):
-        self.write("domains/ops/streams/a/stream.json", stream_json("ops", "a"))
-        self.write("domains/ops/streams/b/stream.json", stream_json("ops", "b"))
-        self.write("domains/risks/streams/c/stream.json", stream_json("risks", "c"))
-        self.write("domains/ops/streams/a/stories/one/story.md", STORY)
-        self.write("domains/ops/streams/b/stories/one/story.md", STORY)
-        self.write("domains/ops/streams/b/stories/two/story.md", STORY)
-        self.write("domains/risks/streams/c/stories/one/story.md", STORY)
+        self.write("projects/abs/domains/ops/streams/a/stream.json", stream_json("abs", "ops", "a"))
+        self.write("projects/abs/domains/ops/streams/b/stream.json", stream_json("abs", "ops", "b"))
+        self.write("projects/abs/domains/risks/streams/c/stream.json", stream_json("abs", "risks", "c"))
+        self.write("projects/abs/domains/ops/streams/a/stories/one/story.md", STORY)
+        self.write("projects/abs/domains/ops/streams/b/stories/one/story.md", STORY)
+        self.write("projects/abs/domains/ops/streams/b/stories/two/story.md", STORY)
+        self.write("projects/abs/domains/risks/streams/c/stories/one/story.md", STORY)
         ws = self.workspace()
-        self.assertEqual([s.key for s in ws.streams], ["stream:ops/a", "stream:ops/b", "stream:risks/c"])
-        self.assertEqual(sorted(ws.stories), ["story:ops/one", "story:ops/two", "story:risks/one"])
-        self.assertEqual(ws.stories["story:ops/one"].stream, "a")
-        self.assertEqual(ws.stories["story:risks/one"].domain, "risks")
+        self.assertEqual(
+            [s.key for s in ws.streams],
+            ["stream:abs/ops/a", "stream:abs/ops/b", "stream:abs/risks/c"],
+        )
+        self.assertEqual(
+            sorted(ws.stories),
+            ["story:abs/ops/one", "story:abs/ops/two", "story:abs/risks/one"],
+        )
+        self.assertEqual(ws.stories["story:abs/ops/one"].stream, "a")
+        self.assertEqual(ws.stories["story:abs/risks/one"].domain, "risks")
 
-    def assert_missing_stream_json(self, stream, domain, name):
-        rel = "domains/%s/streams/%s/stream.json" % (domain, name)
-        self.assertEqual((stream.key, stream.path, stream.data, stream.profile_name), ("stream:%s/%s" % (domain, name), rel, None, None))
+    def test_same_domain_in_two_projects_keeps_distinct_keys(self):
+        self.write("projects/abs/domains/ops/streams/s/stream.json", stream_json("abs", "ops", "s"))
+        self.write("projects/web/domains/ops/streams/s/stream.json", stream_json("web", "ops", "s"))
+        self.write("projects/abs/domains/ops/streams/s/stories/one/story.md", STORY)
+        self.write("projects/web/domains/ops/streams/s/stories/one/story.md", STORY)
+        ws = self.workspace()
+        self.assertEqual([s.key for s in ws.streams], ["stream:abs/ops/s", "stream:web/ops/s"])
+        self.assertEqual(sorted(ws.stories), ["story:abs/ops/one", "story:web/ops/one"])
+        self.assertEqual(ws.stories["story:web/ops/one"].project, "web")
+
+    def assert_missing_stream_json(self, stream, project, domain, name):
+        rel = "projects/%s/domains/%s/streams/%s/stream.json" % (project, domain, name)
+        self.assertEqual(
+            (stream.key, stream.path, stream.data, stream.profile_name),
+            ("stream:%s/%s/%s" % (project, domain, name), rel, None, None),
+        )
         self.assertEqual(tuple(stream.error), (rel, 1, "lifecycle", "missing stream.json"))
 
     def test_stories_without_stream_json_discovered(self):
-        self.write("domains/ops/streams/a/stories/one/story.md", STORY)
-        self.write("domains/ops/streams/b/stream.json", stream_json("ops", "b"))
-        self.write("domains/ops/streams/c/epic.md", "# Epic\n")
+        self.write("projects/abs/domains/ops/streams/a/stories/one/story.md", STORY)
+        self.write("projects/abs/domains/ops/streams/b/stream.json", stream_json("abs", "ops", "b"))
+        self.write("projects/abs/domains/ops/streams/c/epic.md", "# Epic\n")
         ws = self.workspace()
-        self.assertEqual([s.key for s in ws.streams], ["stream:ops/a", "stream:ops/b"])
+        self.assertEqual([s.key for s in ws.streams], ["stream:abs/ops/a", "stream:abs/ops/b"])
         orphan = ws.streams[0]
-        self.assert_missing_stream_json(orphan, "ops", "a")
-        self.assertEqual(list(orphan.stories), ["story:ops/one"])
-        self.assertIs(ws.stories["story:ops/one"], orphan.stories["story:ops/one"])
-        self.assertEqual(ws.stories["story:ops/one"].stream, "a")
+        self.assert_missing_stream_json(orphan, "abs", "ops", "a")
+        self.assertEqual(list(orphan.stories), ["story:abs/ops/one"])
+        self.assertIs(ws.stories["story:abs/ops/one"], orphan.stories["story:abs/ops/one"])
+        self.assertEqual(ws.stories["story:abs/ops/one"].stream, "a")
 
     def test_stories_with_ignored_stream_json_discovered(self):
         subprocess.run(["git", "init", "-q"], cwd=str(self.root), check=True)
-        self.write(".gitignore", "domains/ops/streams/a/stream.json\n")
-        self.write("domains/ops/streams/a/stream.json", stream_json("ops", "a"))
-        self.write("domains/ops/streams/a/stories/one/story.md", STORY)
+        self.write(".gitignore", "projects/abs/domains/ops/streams/a/stream.json\n")
+        self.write("projects/abs/domains/ops/streams/a/stream.json", stream_json("abs", "ops", "a"))
+        self.write("projects/abs/domains/ops/streams/a/stories/one/story.md", STORY)
         ws = self.workspace()
         self.assertEqual(len(ws.streams), 1)
-        self.assert_missing_stream_json(ws.streams[0], "ops", "a")
-        self.assertEqual(list(ws.stories), ["story:ops/one"])
+        self.assert_missing_stream_json(ws.streams[0], "abs", "ops", "a")
+        self.assertEqual(list(ws.stories), ["story:abs/ops/one"])
 
     def test_missing_frontmatter_story_is_error(self):
-        self.write("domains/ops/streams/a/stream.json", stream_json("ops", "a"))
-        self.write("domains/ops/streams/a/stories/one/story.md", "# One\n\n## Goal\n")
-        story = self.workspace().stories["story:ops/one"]
+        self.write("projects/abs/domains/ops/streams/a/stream.json", stream_json("abs", "ops", "a"))
+        self.write("projects/abs/domains/ops/streams/a/stories/one/story.md", "# One\n\n## Goal\n")
+        story = self.workspace().stories["story:abs/ops/one"]
         self.assertIsNone(story.fields)
         self.assertEqual(story.error, "missing frontmatter")
 
     def test_deeply_nested_stream_json_is_lifecycle_error(self):
-        rel = "domains/ops/streams/s1/stream.json"
+        rel = "projects/abs/domains/ops/streams/s1/stream.json"
         self.write(rel, "[" * 200000 + "]" * 200000 + "\n")
-        self.write("tracker/tracker.json", "{\"id_pattern\": " + "[" * 200000 + "\n")
+        self.write("tracker/trackers.json", "{\"trackers\": " + "[" * 200000 + "\n")
         ws = self.workspace()
         stream = ws.streams[0]
         self.assertIsNone(stream.data)
         self.assertEqual((stream.error.path, stream.error.line, stream.error.rule), (rel, 1, "lifecycle"))
-        self.assertIsNone(ws.id_pattern)
+        self.assertEqual(ws.trackers, [])
+
+
+class TasksTest(ModelTestCase):
+    def test_workspace_task_discovered(self):
+        self.write("tasks/e2e-checkout/task.md", TASK)
+        ws = self.workspace()
+        self.assertEqual(list(ws.tasks), ["task:e2e-checkout"])
+        task = ws.tasks["task:e2e-checkout"]
+        self.assertIsInstance(task, Task)
+        self.assertEqual(
+            (task.key, task.slug, task.path, task.error),
+            ("task:e2e-checkout", "e2e-checkout", "tasks/e2e-checkout/task.md", None),
+        )
+        self.assertEqual(task.fields["type"], "e2e")
+        self.assertEqual(task.fields["status"], "waiting")
+        self.assertEqual([heading for _, heading, _ in task.sections], ["Goal"])
+
+    def test_task_missing_frontmatter_is_error(self):
+        self.write("tasks/plain/task.md", "# Plain\n")
+        task = self.workspace().tasks["task:plain"]
+        self.assertIsNone(task.fields)
+        self.assertEqual(task.error, "missing frontmatter")
+
+    def test_only_direct_task_md_discovered(self):
+        self.write("tasks/real/task.md", TASK)
+        self.write("tasks/real/notes.md", "# Notes\n")
+        self.write("tasks/real/work.md", "# Work\n")
+        self.write("tasks/real/sub/task.md", TASK)
+        self.write("tasks/loose.md", TASK)
+        ws = self.workspace()
+        self.assertEqual(list(ws.tasks), ["task:real"])
+
+
+class TrackersTest(ModelTestCase):
+    def test_trackers_loaded_and_match_tracker(self):
+        self.write("tracker/trackers.json", json.dumps(TRACKERS) + "\n")
+        ws = self.workspace()
+        self.assertEqual([t.key for t in ws.trackers], ["jira", "youtrack"])
+        self.assertEqual([t.id_pattern for t in ws.trackers], [r"TASK-\d+", r"YT-\d+"])
+        self.assertEqual([t.url for t in ws.trackers], ["https://jira/{id}", "https://yt/{id}"])
+        for tracker in ws.trackers:
+            self.assertIsInstance(tracker.pattern, re.Pattern)
+        self.assertEqual(ws.match_tracker("TASK-12"), "jira")
+        self.assertEqual(ws.match_tracker("YT-9"), "youtrack")
+        self.assertIsNone(ws.match_tracker("OTHER-1"))
+
+    def test_ambiguous_id_reported_by_match_tracker(self):
+        data = {"trackers": TRACKERS["trackers"] + [{"key": "legacy", "id_pattern": r"TASK-1\d+", "url": "u"}]}
+        self.write("tracker/trackers.json", json.dumps(data) + "\n")
+        ws = self.workspace()
+        self.assertEqual(ws.match_tracker("TASK-12"), "ambiguous")
+        self.assertEqual(ws.match_tracker("TASK-5"), "jira")
+
+    def test_invalid_entries_skipped(self):
+        data = {
+            "trackers": [
+                7,
+                {"key": "no-pattern"},
+                {"key": "bad", "id_pattern": "(", "url": "u"},
+                {"id_pattern": r"X-\d+", "url": "u"},
+                {"key": "jira", "id_pattern": r"TASK-\d+", "url": "https://jira/{id}"},
+            ]
+        }
+        self.write("tracker/trackers.json", json.dumps(data) + "\n")
+        ws = self.workspace()
+        self.assertEqual([t.key for t in ws.trackers], ["jira"])
+        self.assertEqual(ws.match_tracker("TASK-1"), "jira")
+
+    def test_missing_or_invalid_file_gives_no_trackers(self):
+        self.assertEqual(self.workspace().trackers, [])
+        self.assertIsNone(self.workspace().match_tracker("TASK-1"))
+        self.write("tracker/trackers.json", "{\n")
+        ws = self.workspace()
+        self.assertEqual(ws.trackers, [])
+        self.assertIsNone(ws.match_tracker("TASK-1"))
 
 
 class WorkspaceFilesTest(ModelTestCase):
     def test_map_docs(self):
-        self.write("domains/operations/MAP.md", "# Map\n")
-        self.write("domains/clients/README.md", "# Clients\n")
-        self.write("domains/clients/map/home.md", "---\nkey: screen:clients/home\n---\n")
+        self.write("projects/abs/domains/operations/MAP.md", "# Map\n")
+        self.write("projects/web/domains/operations/MAP.md", "# Web map\n")
+        self.write("projects/abs/domains/clients/README.md", "# Clients\n")
+        self.write("projects/abs/domains/clients/map/home.md", "---\nkey: screen:abs/clients/home\n---\n")
         ws = self.workspace()
-        self.assertEqual(ws.map_docs, {"operations": "domains/operations/MAP.md"})
-
-    def test_id_pattern_compiled(self):
-        self.write("tracker/tracker.json", json.dumps({"id_pattern": r"TASK-\d+", "url": "https://t/{id}"}) + "\n")
-        ws = self.workspace()
-        self.assertIsInstance(ws.id_pattern, re.Pattern)
-        self.assertTrue(ws.id_pattern.fullmatch("TASK-12"))
-
-    def test_id_pattern_uncompilable_is_none(self):
-        for pattern in ("a{4294967296}", "(", 7):
-            self.write("tracker/tracker.json", json.dumps({"id_pattern": pattern, "url": "u"}) + "\n")
-            self.assertIsNone(self.workspace().id_pattern, pattern)
-
-    def test_id_pattern_missing_or_invalid_file_is_none(self):
-        self.assertIsNone(self.workspace().id_pattern)
-        self.write("tracker/tracker.json", "{\n")
-        self.assertIsNone(self.workspace().id_pattern)
+        self.assertEqual(
+            ws.map_docs,
+            {
+                "abs/operations": "projects/abs/domains/operations/MAP.md",
+                "web/operations": "projects/web/domains/operations/MAP.md",
+            },
+        )
 
     def test_ignored_files_not_discovered(self):
         subprocess.run(["git", "init", "-q"], cwd=str(self.root), check=True)
         self.write(
             ".gitignore",
-            "domains/operations/map/secret.md\ndomains/operations/streams/hidden/\n"
-            "domains/operations/streams/arm/stories/draft/\ndomains/clients/MAP.md\n",
+            "projects/abs/domains/operations/map/secret.md\nprojects/abs/domains/operations/streams/hidden/\n"
+            "projects/abs/domains/operations/streams/arm/stories/draft/\nprojects/abs/domains/clients/MAP.md\n"
+            "tasks/draft/\n",
         )
-        self.write("domains/operations/map/list.md", SCREEN_LIST)
-        self.write("domains/operations/map/secret.md", "---\nkey: screen:operations/secret\n---\n")
-        self.write("domains/operations/streams/arm/stream.json", stream_json("operations", "arm"))
-        self.write("domains/operations/streams/arm/stories/card/story.md", STORY)
-        self.write("domains/operations/streams/arm/stories/draft/story.md", STORY)
-        self.write("domains/operations/streams/hidden/stream.json", stream_json("operations", "hidden"))
-        self.write("domains/operations/MAP.md", "# Map\n")
-        self.write("domains/clients/MAP.md", "# Map\n")
+        self.write("projects/abs/domains/operations/map/list.md", SCREEN_LIST)
+        self.write("projects/abs/domains/operations/map/secret.md", "---\nkey: screen:abs/operations/secret\n---\n")
+        self.write(
+            "projects/abs/domains/operations/streams/arm/stream.json",
+            stream_json("abs", "operations", "arm"),
+        )
+        self.write("projects/abs/domains/operations/streams/arm/stories/card/story.md", STORY)
+        self.write("projects/abs/domains/operations/streams/arm/stories/draft/story.md", STORY)
+        self.write("projects/abs/domains/operations/streams/hidden/stream.json", stream_json("abs", "operations", "hidden"))
+        self.write("projects/abs/domains/operations/MAP.md", "# Map\n")
+        self.write("projects/abs/domains/clients/MAP.md", "# Map\n")
+        self.write("tasks/e2e-checkout/task.md", TASK)
+        self.write("tasks/draft/x/task.md", TASK)
         ws = self.workspace()
-        self.assertEqual(list(ws.elements), ["screen:operations/list"])
-        self.assertEqual([s.key for s in ws.streams], ["stream:operations/arm"])
-        self.assertEqual(list(ws.stories), ["story:operations/card"])
-        self.assertEqual(ws.map_docs, {"operations": "domains/operations/MAP.md"})
+        self.assertEqual(list(ws.elements), ["screen:abs/operations/list"])
+        self.assertEqual([s.key for s in ws.streams], ["stream:abs/operations/arm"])
+        self.assertEqual(list(ws.stories), ["story:abs/operations/card"])
+        self.assertEqual(list(ws.tasks), ["task:e2e-checkout"])
+        self.assertEqual(ws.map_docs, {"abs/operations": "projects/abs/domains/operations/MAP.md"})
 
 
 if __name__ == "__main__":

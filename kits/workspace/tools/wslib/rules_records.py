@@ -1,14 +1,22 @@
-"""Rules for work records and ADRs."""
+"""Rules for work records, task record consistency and ADRs."""
 from __future__ import annotations
 
+import datetime
+import posixpath
 import re
 from typing import List, Optional
 
 from wslib.common import Finding, h2_headings, parse_frontmatter
+from wslib.model import Workspace
 from wslib.rules_keys import lookup
 
-RECORD_KEYS = ["task", "repos", "merge_requests", "commits"]
+RECORD_KEYS = ["repos", "merge_requests", "commits", "recorded"]
+LIST_KEYS = ["repos", "merge_requests", "commits"]
 RECORD_SECTIONS = ["Changed", "Decisions", "Open questions", "Verification"]
+DONE_QUESTIONS = "None."
+RECORD_NAME = "work.md"
+TEMPLATE_PREFIX = ".agents/templates/"
+DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 ADR_NAME = re.compile(r"^(\d{4})-[a-z0-9-]+\.md$")
 ADR_STATUSES = {"proposed", "accepted", "superseded"}
 FENCE_RE = re.compile(r"^ {0,3}(```|~~~)")
@@ -32,17 +40,6 @@ def _body_outside_fences(body: str) -> str:
     return "\n".join(lines)
 
 
-def _id_pattern(ctx) -> Optional[re.Pattern]:
-    data, error = ctx.load_json("tracker/tracker.json")
-    if error is not None or not isinstance(data, dict) or not isinstance(data.get("id_pattern"), str):
-        return None
-    # A bad pattern is reported by json-shape; it must not crash check (e.g. a{4294967296} overflows).
-    try:
-        return re.compile(data["id_pattern"])
-    except (re.error, OverflowError, RecursionError, ValueError):
-        return None
-
-
 def _repo_names(ctx) -> set:
     if "repos.json" not in ctx.files:
         return set()
@@ -55,13 +52,23 @@ def _repo_names(ctx) -> set:
     }
 
 
-def _check_record(ctx, name: str, rel: str, repo_names: set) -> List[Finding]:
+def _is_date(value) -> bool:
+    if not isinstance(value, str) or not DATE_RE.fullmatch(value):
+        return False
+    try:
+        datetime.date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _check_record(ctx, rel: str, repo_names: set) -> List[Finding]:
     def finding(message, line=1):
         return Finding(rel, line, "work-record", message)
 
     text = ctx.read_text(rel)
     if text is None:
-        return [finding("record.md is not readable UTF-8")]
+        return [finding("work.md is not readable UTF-8")]
     data, body, error = parse_frontmatter(text)
     if error is not None:
         return [finding(error, _error_line(error))]
@@ -70,15 +77,15 @@ def _check_record(ctx, name: str, rel: str, repo_names: set) -> List[Finding]:
     for key in RECORD_KEYS:
         if key not in data:
             findings.append(finding("missing frontmatter key %s" % key))
-    if "task" in data and data["task"] != name:
-        findings.append(finding("task %s does not match directory %s" % (data["task"], name)))
-    for key in RECORD_KEYS[1:]:
+    for key in LIST_KEYS:
         if key in data and not isinstance(data[key], list):
             findings.append(finding("%s must be a list" % key))
     if isinstance(data.get("repos"), list):
         for repo in data["repos"]:
             if repo not in repo_names:
                 findings.append(finding("repository %s is not in repos.json" % repo))
+    if "recorded" in data and not _is_date(data["recorded"]):
+        findings.append(finding("recorded must be a YYYY-MM-DD date"))
     headings = set(h2_headings(_body_outside_fences(body)))
     for section in RECORD_SECTIONS:
         if section not in headings:
@@ -86,40 +93,94 @@ def _check_record(ctx, name: str, rel: str, repo_names: set) -> List[Finding]:
     return findings
 
 
+def _task_folders(ws) -> dict:
+    """Task folder -> task entity of the model; stories and workspace tasks are both tasks here."""
+    folders = {}
+    for task in list(ws.stories.values()) + list(ws.tasks.values()):
+        folders[posixpath.dirname(task.path)] = task
+    return folders
+
+
 def check_work_record(ctx) -> List[Finding]:
-    # directories are the second segment of ctx.files paths under work/ with at least three segments
-    names = []
-    for rel in ctx.files:
-        parts = rel.split("/")
-        if len(parts) >= 3 and parts[0] == "work" and parts[1] not in names:
-            names.append(parts[1])
-    id_re = _id_pattern(ctx)
+    # The model is the single source of task placement; a folder stays a task folder even when its task.md is unreadable.
+    folders = _task_folders(Workspace(ctx))
     repo_names = _repo_names(ctx)
     findings: List[Finding] = []
-    for name in names:
-        rel = "work/%s/record.md" % name
-        if id_re is not None and not id_re.fullmatch(name):
-            findings.append(Finding("work/%s" % name, 1, "work-record", "directory name does not match id_pattern"))
-        if rel not in ctx.files:
-            findings.append(Finding("work/%s" % name, 1, "work-record", "missing record.md"))
+    for rel in ctx.files:
+        parts = rel.split("/")
+        # A work.md under .agents/templates/ is the kit's record template, not a workspace record.
+        if parts[-1] != RECORD_NAME or rel.startswith(TEMPLATE_PREFIX):
             continue
-        findings.extend(_check_record(ctx, name, rel, repo_names))
+        if "/".join(parts[:-1]) in folders:
+            findings.extend(_check_record(ctx, rel, repo_names))
+        else:
+            findings.append(Finding(rel, 1, "work-record", "work.md outside a task folder"))
+    return findings
+
+
+def _section_text(body: str, heading: str) -> Optional[str]:
+    """Trimmed text of an H2 section, or None when the heading is absent."""
+    lines: List[str] = []
+    active = False
+    for line in body.split("\n"):
+        if line.startswith("## "):
+            if active:
+                break
+            active = line[3:].strip() == heading
+        elif active:
+            lines.append(line)
+    return "\n".join(lines).strip() if active else None
+
+
+def check_task_state(ctx) -> List[Finding]:
+    """Consistency between a task's done status and the work.md in its folder."""
+    findings: List[Finding] = []
+    for folder, task in sorted(_task_folders(Workspace(ctx)).items()):
+        # Consistency needs parsed fields; unreadable or broken task files are reported by their shape rules.
+        fields = task.fields
+        if not isinstance(fields, dict):
+            continue
+        done = fields.get("status") == "done"
+        work_rel = folder + "/" + RECORD_NAME
+        if work_rel not in ctx.files:
+            if done:
+                findings.append(Finding(task.path, 1, "task-state", "status is done but the folder has no work.md"))
+            continue
+        if not done:
+            findings.append(Finding(work_rel, 1, "task-state", "work.md in a task folder whose status is not done"))
+            continue
+        data, body, error = parse_frontmatter(ctx.read_text(work_rel) or "")
+        # A broken record is reported by work-record; the done gate reads only well-formed frontmatter.
+        merge_requests = data.get("merge_requests") if isinstance(data, dict) else None
+        if isinstance(merge_requests, list) and not merge_requests:
+            findings.append(
+                Finding(work_rel, 1, "task-state", "merge_requests must not be empty when the task is done")
+            )
+        # A missing section is work-record's finding; the gate fires only when the section says something else.
+        questions = None if error is not None else _section_text(body, "Open questions")
+        if questions is not None and questions != DONE_QUESTIONS:
+            findings.append(
+                Finding(work_rel, 1, "task-state", "Open questions must be %s when the task is done" % DONE_QUESTIONS)
+            )
     return findings
 
 
 def check_adr(ctx) -> List[Finding]:
-    # files directly under docs/adr/ except .gitkeep and README.md
+    # ADR files sit directly under docs/adr/ or projects/<key>/adr/; .gitkeep and README.md are placeholders.
     findings: List[Finding] = []
     seen_numbers = set()
     for rel in ctx.files:
         parts = rel.split("/")
-        if len(parts) != 3 or parts[:2] != ["docs", "adr"] or parts[2] in (".gitkeep", "README.md"):
+        in_adr_dir = (len(parts) == 3 and parts[:2] == ["docs", "adr"]) or (
+            len(parts) == 4 and parts[0] == "projects" and parts[2] == "adr"
+        )
+        if not in_adr_dir or parts[-1] in (".gitkeep", "README.md"):
             continue
 
         def finding(message, line=1, rel=rel):
             return Finding(rel, line, "adr", message)
 
-        m = ADR_NAME.match(parts[2])
+        m = ADR_NAME.match(parts[-1])
         if not m:
             findings.append(finding("file name is not NNNN-<slug>.md"))
         elif m.group(1) in seen_numbers:
@@ -153,4 +214,4 @@ def check_adr(ctx) -> List[Finding]:
     return findings
 
 
-RULES = [("work-record", check_work_record), ("adr", check_adr)]
+RULES = [("work-record", check_work_record), ("task-state", check_task_state), ("adr", check_adr)]

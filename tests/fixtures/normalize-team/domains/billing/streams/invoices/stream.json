@@ -1,0 +1,7 @@
+{
+  "key": "stream:billing/invoices",
+  "profile": "ui-migration",
+  "stage": "goal",
+  "scope": [],
+  "approvals": []
+}

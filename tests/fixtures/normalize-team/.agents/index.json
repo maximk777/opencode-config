@@ -1,0 +1,8 @@
+{
+  "story:billing/export": "domains/billing/streams/invoices/stories/export/story.md",
+  "story:billing/list": "domains/billing/streams/invoices/stories/list/story.md",
+  "story:catalog/items": "domains/catalog/streams/import/stories/items/story.md",
+  "TASK-1": "domains/billing/streams/invoices/stories/list/story.md",
+  "TASK-2": "domains/billing/streams/invoices/stories/export/story.md",
+  "TASK-3": "domains/catalog/streams/import/stories/items/story.md"
+}

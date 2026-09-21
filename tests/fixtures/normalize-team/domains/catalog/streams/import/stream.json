@@ -1,0 +1,7 @@
+{
+  "key": "stream:catalog/import",
+  "profile": "ui-migration",
+  "stage": "goal",
+  "scope": [],
+  "approvals": []
+}

@@ -1,10 +1,13 @@
 ---
-key: story:<domain>/<slug>
+key: story:<project>/<domain>/<slug>
 type: story
+status: waiting
+owner:
+started:
 wave: 1
 tracker:
 scope:
-  - screen:<domain>/<slug>
+  - screen:<project>/<domain>/<slug>
 depends: []
 repos: []
 decisions: []

@@ -98,8 +98,10 @@ class AdoptTest(unittest.TestCase):
     def test_parameters_substituted_in_copied_templated_file(self):
         self.git_init()
         self.adopt_ok()
-        tracker = json.loads((self.target / "tracker/tracker.json").read_text(encoding="utf-8"))
-        self.assertEqual(tracker["id_pattern"], r"TASK-\d+")
+        trackers = json.loads((self.target / "tracker/trackers.json").read_text(encoding="utf-8"))
+        main = next(t for t in trackers["trackers"] if t["key"] == "main")
+        self.assertEqual(main["id_pattern"], r"TASK-\d+")
+        self.assertEqual(main["url"], DEFAULT_PARAMS["tracker_url"])
         for rel in kit_meta()["templated"]:
             self.assertNotIn("{{", (self.target / rel).read_text(encoding="utf-8"), rel)
 

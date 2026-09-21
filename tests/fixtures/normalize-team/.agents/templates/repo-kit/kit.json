@@ -1,0 +1,11 @@
+{
+  "name": "example",
+  "version": "0.1.0",
+  "target": ".agents",
+  "params": {
+    "SERVICE": {
+      "description": "Service name of the repository, lowercase words joined by hyphens",
+      "pattern": "[a-z][a-z0-9-]*"
+    }
+  }
+}

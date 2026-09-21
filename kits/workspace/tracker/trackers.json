@@ -1,0 +1,9 @@
+{
+  "trackers": [
+    {
+      "key": "main",
+      "id_pattern": "{{id_pattern}}",
+      "url": "{{tracker_url}}"
+    }
+  ]
+}

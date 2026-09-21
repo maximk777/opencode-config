@@ -1,0 +1,11 @@
+{
+  "name": "workspace",
+  "version": "0.4.1",
+  "params": {
+    "workspace_name": "demo",
+    "title": "Demo workspace",
+    "forge": "gitlab",
+    "id_pattern": "TASK-\\d+",
+    "tracker_url": "https://tracker.example/i/{id}"
+  }
+}

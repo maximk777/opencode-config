@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List
 
 import generate
-from wslib import gen_adapters
+from wslib import gen_adapters, gen_status
 from wslib.common import Finding
 
 HINT = "run python3 tools/generate.py"
@@ -37,6 +37,15 @@ def check_generated(ctx) -> List[Finding]:
         if actual != expected:
             line = first_diff_line(actual, expected)
             findings.append(Finding(rel, line, "generated-stale", "differs from generator output; " + HINT))
+    # A STATUS.md that opted into generation (it carries any status marker) must keep every
+    # section's markers: without a pair that section can never be regenerated. Files written
+    # before the kit shipped markers carry none and stay plain hand text.
+    if "STATUS.md" in ctx.files:
+        text = ctx.read_text("STATUS.md")
+        if text is not None and gen_status.has_markers(text) and not gen_status.has_all_markers(text):
+            findings.append(
+                Finding("STATUS.md", 1, "generated-stale", "status section markers missing; restore them and " + HINT)
+            )
     # Only ctx.files is inspected: git-ignored junk (.DS_Store, __pycache__) is never shared, so it is not reported
     # even though generate.py deletes it.
     prefixes = tuple(owned + "/" for owned in gen_adapters.OWNED_DIRS)

@@ -4,7 +4,7 @@ description: Use when the workspace-builder agent must add something to an exist
 ---
 # Extend a workspace
 
-Add an agent, skill, rule, role, domain, stand, variable or repository to an existing team workspace by the workspace's own skills, so the result matches what a team member would get.
+Add an agent, skill, rule, domain, stand, variable or repository to an existing team workspace by the workspace's own skills, so the result matches what a team member would get.
 
 ## Open
 

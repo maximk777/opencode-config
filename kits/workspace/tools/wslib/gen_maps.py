@@ -89,14 +89,18 @@ def kind_specs(ws: Workspace) -> List[dict]:
     return [spec for spec, _ in _kind_profiles(ws)]
 
 
-def _domain_blocks(ws: Workspace, domain: str) -> List[Tuple[str, List[str]]]:
-    """Return (marker name, table lines) for every expected marker pair of a domain."""
+def _domain_blocks(ws: Workspace, project: str, domain: str) -> List[Tuple[str, List[str]]]:
+    """Return (marker name, table lines) for every expected marker pair of a project's domain."""
     blocks: List[Tuple[str, List[str]]] = []
     # A domain's element tables belong to no single stream, so the From column follows the profile declaring the kind.
     for spec, profile in _kind_profiles(ws):
         names = marker_names(spec)
         elements = sorted(
-            (e for e in ws.element_list if e.domain == domain and e.kind == spec["kind"] and _usable(e)),
+            (
+                e
+                for e in ws.element_list
+                if e.project == project and e.domain == domain and e.kind == spec["kind"] and _usable(e)
+            ),
             key=lambda e: e.slug + ".md",
         )
         rows = [[_cell(e.fields.get(f)) for f in spec["fields"]] for e in elements]
@@ -155,17 +159,19 @@ def render(root) -> Dict[str, bytes]:
     ctx = Context(Path(root))
     ws = Workspace(ctx)
     out: Dict[str, bytes] = {}
-    for domain, rel in sorted(ws.map_docs.items()):
+    for key, rel in sorted(ws.map_docs.items()):
         text = read_map(ctx, rel)
         if text is None:
             continue
-        data = _render_map(text, _domain_blocks(ws, domain))
+        # map_docs is keyed "<project>/<domain>"; the same domain name may exist in several projects.
+        project, domain = key.split("/", 1)
+        data = _render_map(text, _domain_blocks(ws, project, domain))
         if data is not None:
             out[rel] = data
     for stream in ws.streams:
         if stream.data is None:
             continue
-        out["domains/%s/streams/%s/BREAKDOWN.md" % (stream.domain, stream.name)] = _render_breakdown(
-            stream, ws.profiles.get(stream.profile_name)
+        out["projects/%s/domains/%s/streams/%s/BREAKDOWN.md" % (stream.project, stream.domain, stream.name)] = (
+            _render_breakdown(stream, ws.profiles.get(stream.profile_name))
         )
     return out

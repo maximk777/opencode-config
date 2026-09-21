@@ -13,7 +13,7 @@ BEGIN = "<!-- repos:begin -->"
 EXTERNAL_PREFIXES = ("diagram:", "mockup:")
 END = "<!-- repos:end -->"
 ADR_RE = re.compile(r"([0-9]{4})-[a-z0-9-]+\.md")
-TABLE_HEADER = ["| Name | Forge | Default branch | Roles | Kit | Summary |", "|---|---|---|---|---|---|"]
+TABLE_HEADER = ["| Name | Forge | Default branch | Kit | Summary |", "|---|---|---|---|---|"]
 
 
 def _read_text(path: Path) -> Optional[str]:
@@ -49,19 +49,18 @@ def _table_rows(manifest: object) -> Optional[List[str]]:
         if not isinstance(entry, dict):
             return None
         cells = [entry.get(f, "") for f in ("name", "forge", "default_branch")]
-        roles = entry.get("roles", [])
         summary = entry.get("summary", "")
         kit = entry.get("kit", {})
-        if not isinstance(roles, list) or not isinstance(kit, dict):
+        if not isinstance(kit, dict):
             return None
         kind = kit.get("kind", "")
-        texts = cells + roles + [kind, summary]
+        texts = cells + [kind, summary]
         if not all(isinstance(c, str) for c in texts):
             return None
         # Lone surrogates (valid JSON escapes, not UTF-8) make the manifest unusable instead of raising.
         if not all(_encodable(c) for c in texts):
             return None
-        rows.append("| %s |" % " | ".join(cells + [", ".join(roles), kind, summary]))
+        rows.append("| %s |" % " | ".join(cells + [kind, summary]))
     return rows
 
 
@@ -109,14 +108,16 @@ def _render_index(root: Path) -> bytes:
             if not isinstance(url, str) or not _encodable(key) or not _encodable(url) or key in index:
                 continue
             index[key] = url
-    # The model discovers stories from Context files: ignored story files stay out,
-    # stories in folders without stream.json are indexed.
-    stories = [s for s in Workspace(Context(root)).stories.values() if s.fields is not None and s.error is None]
-    stories.sort(key=lambda s: s.key)
-    for story in stories:
-        index.setdefault(story.key, story.path)
-    aliases = [(s.fields.get("tracker"), s.path) for s in stories]
-    # Stable sort keeps the smaller story key first when two stories share a tracker id.
+    # Stories and tasks are the lifecycle items; their keys sort ascending,
+    # which also places every story: before every task:.
+    ws = Workspace(Context(root))
+    items = [s for s in ws.stories.values() if s.fields is not None and s.error is None]
+    items += [t for t in ws.tasks.values() if t.fields is not None and t.error is None]
+    items.sort(key=lambda item: item.key)
+    for item in items:
+        index.setdefault(item.key, item.path)
+    aliases = [(item.fields.get("tracker"), item.path) for item in items]
+    # Stable sort keeps the smaller item key first when two items share a tracker id.
     for tracker, path in sorted((a for a in aliases if isinstance(a[0], str) and a[0]), key=lambda a: a[0]):
         index.setdefault(tracker, path)
     return (json.dumps(index, indent=2, ensure_ascii=False) + "\n").encode("utf-8")

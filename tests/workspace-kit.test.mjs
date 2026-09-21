@@ -101,9 +101,31 @@ test("kit contains lifecycle templates, the ui-migration profile and task skills
   assert.ok(Array.isArray(profile.story?.sections?.ru), "story.sections has no ru list");
 });
 
-test("kit version is at least 0.4.0", () => {
+test("kit version is at least 0.5.0", () => {
   const version = JSON.parse(readFileSync(path.join(KIT, "kit.json"), "utf8")).version;
-  assert.ok(!semverGreater("0.4.0", version), `kit version ${version} is below 0.4.0`);
+  assert.ok(!semverGreater("0.5.0", version), `kit version ${version} is below 0.5.0`);
+});
+
+test("kit matches the project-oriented tree", () => {
+  const kit = JSON.parse(readFileSync(path.join(KIT, "kit.json"), "utf8"));
+  assert.ok(kit.templated.includes("tracker/trackers.json"), "templated lacks tracker/trackers.json");
+  assert.ok(!kit.templated.includes("tracker/tracker.json"), "templated still lists tracker/tracker.json");
+  const paths = [
+    "projects/.gitkeep",
+    "tasks/.gitkeep",
+    "STATUS.md",
+    ".agents/templates/project.md",
+    ".agents/templates/task.md",
+    ".agents/templates/work.md",
+    ".agents/skills/task-start/SKILL.md",
+    ".agents/skills/status/SKILL.md",
+  ];
+  for (const rel of paths) {
+    assert.ok(existsSync(path.join(KIT, rel)), `kit path missing: ${rel}`);
+  }
+  for (const rel of [".agents/roles", "domains", "work", ".agents/templates/role.md", ".agents/templates/work-record.md"]) {
+    assert.ok(!existsSync(path.join(KIT, rel)), `kit path must not exist: ${rel}`);
+  }
 });
 
 test("every kit skill has frontmatter, numbered steps and Without Python", () => {

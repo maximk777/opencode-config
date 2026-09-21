@@ -1,0 +1,7 @@
+.local/
+repos/
+__pycache__/
+!.claude/
+!CLAUDE.md
+!.opencode/
+!.cursor/

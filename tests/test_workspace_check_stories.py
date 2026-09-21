@@ -13,17 +13,17 @@ import unittest
 from workspace_helpers import create_workspace, run_check
 
 PROFILE_DIR = REPO / "kits/workspace/.agents/profiles/ui-migration"
-STREAM = "domains/operations/streams/s"
+STREAM = "projects/abs/domains/operations/streams/s"
 BODY = (
     "\n## Goal\n\nx\n\n## Scope\n\nx\n\n## Acceptance criteria\n\nx\n\n## Verification\n\nx\n"
     "\n## Out of scope\n\nx\n\n## Open questions\n\nNone.\n"
 )
 DEFAULT_FIELDS = [
-    ("key", "story:operations/documents"),
+    ("key", "story:abs/operations/documents"),
     ("type", "story"),
     ("wave", "1"),
     ("tracker", ""),
-    ("scope", "[screen:operations/documents]"),
+    ("scope", "[screen:abs/operations/documents]"),
     ("depends", "[]"),
     ("repos", "[]"),
     ("decisions", "[]"),
@@ -44,7 +44,7 @@ def story(overrides=None, drop=(), extra="", body=BODY):
 
 def screen(slug):
     return (
-        "---\nkey: screen:operations/%s\nroute: /%s\nkind: place\nsection: s\nparent:\naccess: a\n"
+        "---\nkey: screen:abs/operations/%s\nroute: /%s\nkind: place\nsection: s\nparent:\naccess: a\n"
         "label: L\nwave: 1\nstory:\n---\n\n## Transitions\n\n| Action | Target |\n|---|---|\n" % (slug, slug)
     )
 
@@ -57,8 +57,8 @@ class CheckStoriesTest(unittest.TestCase):
         profile = self.ws / ".agents/profiles/ui-migration"
         if not (profile / "profile.json").is_file():
             shutil.copytree(str(PROFILE_DIR), str(profile), dirs_exist_ok=True)
-        self.write("domains/operations/map/documents.md", screen("documents"))
-        self.write("domains/operations/map/report.md", screen("report"))
+        self.write("projects/abs/domains/operations/map/documents.md", screen("documents"))
+        self.write("projects/abs/domains/operations/map/report.md", screen("report"))
         self.write_stream("s", "ui-migration")
 
     def tearDown(self):
@@ -71,14 +71,14 @@ class CheckStoriesTest(unittest.TestCase):
 
     def write_stream(self, name, profile):
         self.write(
-            "domains/operations/streams/%s/stream.json" % name,
+            "projects/abs/domains/operations/streams/%s/stream.json" % name,
             json.dumps({
-                "key": "stream:operations/%s" % name, "profile": profile, "stage": "goal",
-                "scope": ["screen:operations/documents"], "approvals": []}, indent=2) + "\n",
+                "key": "stream:abs/operations/%s" % name, "profile": profile, "stage": "goal",
+                "scope": ["screen:abs/operations/documents"], "approvals": []}, indent=2) + "\n",
         )
 
     def write_story(self, text, slug="documents", stream="s"):
-        rel = "domains/operations/streams/%s/stories/%s/story.md" % (stream, slug)
+        rel = "projects/abs/domains/operations/streams/%s/stories/%s/story.md" % (stream, slug)
         self.write(rel, text)
         return rel
 
@@ -99,8 +99,8 @@ class CheckStoriesTest(unittest.TestCase):
         self.assertEqual(self.findings(), [])
 
     def test_story_in_wrong_folder(self):
-        rel = self.write_story(story({"key": "story:operations/document"}))
-        self.assertOneOn(rel, "story:operations/document")
+        rel = self.write_story(story({"key": "story:abs/operations/document"}))
+        self.assertOneOn(rel, "story:abs/operations/document")
 
     def test_missing_field(self):
         rel = self.write_story(story(drop=("wave",)))
@@ -124,7 +124,7 @@ class CheckStoriesTest(unittest.TestCase):
         self.assertOneOn(rel, "task")
 
     def test_frontmatter_error(self):
-        rel = self.write_story("---\nkey: story:operations/documents\n\ntype: story\n---\n" + BODY)
+        rel = self.write_story("---\nkey: story:abs/operations/documents\n\ntype: story\n---\n" + BODY)
         lines = self.findings()
         self.assertEqual(len(lines), 1, lines)
         self.assertTrue(lines[0].startswith(rel + ":"), lines)
@@ -135,20 +135,20 @@ class CheckStoriesTest(unittest.TestCase):
         self.assertOneOn(rel, "frontmatter")
 
     def test_stories_of_folder_without_stream_json_not_checked(self):
-        self.write_story(story({"key": "story:operations/wrong"}, drop=("wave",)), stream="bare")
+        self.write_story(story({"key": "story:abs/operations/wrong"}, drop=("wave",)), stream="bare")
         self.assertEqual(self.findings(), [])
 
     def test_scope_key_missing_from_map(self):
-        rel = self.write_story(story({"scope": "[screen:operations/documents, screen:operations/ghost]"}))
-        self.assertOneOn(rel, "screen:operations/ghost")
+        rel = self.write_story(story({"scope": "[screen:abs/operations/documents, screen:abs/operations/ghost]"}))
+        self.assertOneOn(rel, "screen:abs/operations/ghost")
 
     def test_unresolved_depends(self):
-        rel = self.write_story(story({"depends": "[story:operations/ghost]"}))
-        self.assertOneOn(rel, "story:operations/ghost")
+        rel = self.write_story(story({"depends": "[story:abs/operations/ghost]"}))
+        self.assertOneOn(rel, "story:abs/operations/ghost")
 
     def test_resolved_depends(self):
-        self.write_story(story({"key": "story:operations/report", "scope": "[screen:operations/report]"}), "report")
-        self.write_story(story({"depends": "[story:operations/report]"}))
+        self.write_story(story({"key": "story:abs/operations/report", "scope": "[screen:abs/operations/report]"}), "report")
+        self.write_story(story({"depends": "[story:abs/operations/report]"}))
         self.assertEqual(self.findings(), [])
 
     def test_unresolved_repos(self):
@@ -170,15 +170,15 @@ class CheckStoriesTest(unittest.TestCase):
         self.assertEqual(self.findings(), [])
 
     def test_unresolved_mockups(self):
-        rel = self.write_story(story({"mockups": "[mockup:operations/documents]"}))
-        self.assertOneOn(rel, "mockup:operations/documents")
+        rel = self.write_story(story({"mockups": "[mockup:abs/operations/documents]"}))
+        self.assertOneOn(rel, "mockup:abs/operations/documents")
 
     def test_resolved_mockups(self):
         self.write(
             "docs/diagrams/external.json",
-            json.dumps({"diagrams": [{"key": "mockup:operations/documents", "url": "https://x.test/m"}]}) + "\n",
+            json.dumps({"diagrams": [{"key": "mockup:abs/operations/documents", "url": "https://x.test/m"}]}) + "\n",
         )
-        self.write_story(story({"mockups": "[mockup:operations/documents]"}))
+        self.write_story(story({"mockups": "[mockup:abs/operations/documents]"}))
         self.assertEqual(self.findings(), [])
 
     def test_empty_scope_with_unmapped_is_not_a_story_finding(self):
@@ -187,7 +187,7 @@ class CheckStoriesTest(unittest.TestCase):
 
     def test_stream_with_unknown_profile_not_checked(self):
         self.write_stream("other", "ghost-profile")
-        self.write_story(story({"key": "story:operations/wrong", "type": "task"}, drop=("wave",)), stream="other")
+        self.write_story(story({"key": "story:abs/operations/wrong", "type": "task"}, drop=("wave",)), stream="other")
         self.assertEqual(self.findings(), [])
 
 
