@@ -21,7 +21,6 @@ STREAM_KEY = "stream:demo/demo/migration"
 MAP = "projects/demo/domains/demo/MAP.md"
 LIST_SCREEN = "projects/demo/domains/demo/map/list.md"
 CARD_SCREEN = "projects/demo/domains/demo/map/card.md"
-SCREEN_KEY = "screen:demo/demo"
 TRACKERS = {"list": "TASK-1", "card": "TASK-2", "bff-cleanup": "TASK-3"}
 
 

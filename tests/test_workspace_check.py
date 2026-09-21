@@ -167,7 +167,8 @@ class RemainingOption(unittest.TestCase):
 
     def test_uncovered_screen_listed(self):
         # Domain operations of project operations, at stage decomposition: the report screen is in the
-        # stream scope but in no story's scope.
+        # stream scope but in no story's scope. No PROJECT.md is created on purpose: --remaining never
+        # prints layout findings, so the missing file cannot leak into the output under assertion.
         domain = "projects/operations/domains/operations"
         self.write(domain + "/map/documents.md", screen("documents", "story:operations/operations/documents"))
         self.write(domain + "/map/report.md", screen("report"))

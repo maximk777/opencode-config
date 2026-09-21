@@ -63,9 +63,6 @@ class LifecycleBase(unittest.TestCase):
         if not (target / "profile.json").is_file():
             shutil.copytree(str(UI_PROFILE), str(target), dirs_exist_ok=True)
         shutil.copytree(str(CHECKLIST_PROFILE), str(self.ws / ".agents/profiles/checklist"))
-        # The 0.4 kit tree has no trackers.json yet; tracker_ids needs one pattern for TASK ids.
-        self.write("tracker/trackers.json", json.dumps({"trackers": [
-            {"key": "tasks", "id_pattern": r"TASK-\d+", "url": "https://tracker.example/i/{id}"}]}, indent=2) + "\n")
 
     def tearDown(self):
         self._tmp.cleanup()

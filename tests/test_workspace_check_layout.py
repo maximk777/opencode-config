@@ -43,10 +43,6 @@ class CheckLayoutTest(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name).resolve()
         self.ws = create_workspace(self.tmp)
-        # The kit templates still ship the old single-tracker file; the check rules already
-        # require the new layout, so tests bridge the gap until the kit update lands.
-        (self.ws / "STATUS.md").write_text("# STATUS\n", encoding="utf-8")
-        write_trackers(self.ws, tracker_entry())
 
     def tearDown(self):
         self._tmp.cleanup()
