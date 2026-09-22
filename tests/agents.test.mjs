@@ -8,9 +8,9 @@ const cfg = JSON.parse(readFileSync(`${ROOT}opencode.json`, "utf8"));
 const A = cfg.agent;
 const prompt = (n) => readFileSync(`${ROOT}prompts/${n}.md`, "utf8");
 
-test("orchestrator is primary on the smart tier", () => {
+test("orchestrator is primary on the fast tier", () => {
   assert.equal(A.orchestrator.mode, "primary");
-  assert.equal(A.orchestrator.model, "{file:./tiers/smart}");
+  assert.equal(A.orchestrator.model, "{file:./tiers/fast}");
 });
 
 test("executors and reviewer are hidden subagents with the right tiers", () => {
@@ -37,8 +37,19 @@ test("executors cannot commit and the orchestrator commits without approval", ()
 test("orchestrator edits only specs and dispatches only the flow subagents", () => {
   assert.deepEqual(A.orchestrator.permission.edit, { "*": "deny", "../*specs/*": "allow" });
   assert.deepEqual(A.orchestrator.permission.task, {
-    "*": "deny", executor: "allow", "executor-strong": "allow", "task-reviewer": "allow", explorer: "allow", "web-researcher": "allow",
+    "*": "deny", executor: "allow", "executor-strong": "allow", "task-reviewer": "allow", explorer: "allow", "web-researcher": "allow", brainstormer: "allow",
   });
+});
+
+test("brainstormer is a visible smart subagent for deep elaboration", () => {
+  const b = A.brainstormer;
+  assert.equal(b.mode, "subagent");
+  assert.notEqual(b.hidden, true);
+  assert.equal(b.model, "{file:./tiers/smart}");
+  assert.equal(b.permission.edit, "deny");
+  assert.equal(b.permission.task, "deny");
+  assert.ok(prompt("brainstormer").includes("2-3 candidate approaches"));
+  assert.ok(prompt("brainstormer").includes("Read-only"));
 });
 
 test("web-researcher is a visible fast subagent with web tools only", () => {

@@ -31,7 +31,8 @@ flowchart LR
   end
   subgraph OpenCode["OpenCode (~/.config/opencode, git)"]
     AR[architect<br/>smart]
-    OR[orchestrator<br/>smart]
+    OR[orchestrator<br/>fast]
+    BR[brainstormer<br/>smart]
     HB[harness-builder<br/>fast]
     IN[instrumentation<br/>fast]
     SI[setup-improver<br/>fast]
@@ -95,7 +96,8 @@ flowchart LR
 | Агент | Режим | Tier | Может вызывать | Правит | Назначение |
 |---|---|---|---|---|---|
 | `architect` | primary | smart | explorer | `~/specs/<p>/architecture/**` включая `poc/`; временный worktree для PoC | система целиком: ADR, C4 и sequence в Mermaid, версии, роадмап, бэклог кандидатов, proof of concept с цифрами |
-| `orchestrator` | primary | smart | executor, executor-strong, task-reviewer, explorer | `~/specs/<p>/openspec/**` | одно изменение от брейншторма до архива |
+| `orchestrator` | primary | fast | executor, executor-strong, task-reviewer, explorer, web-researcher, brainstormer | `~/specs/<p>/openspec/**` | одно изменение от брейншторма до архива |
+| `brainstormer` | subagent | smart | — | ничего | глубокая проработка дизайна по вызову оркестратора: подходы, трейдоффы, риски, открытые вопросы |
 | `executor` | subagent, hidden | fast | — | рабочая репа, файлы из брифа | задача с готовым каркасом кода или на 1–2 файла |
 | `executor-strong` | subagent, hidden | fast | — | рабочая репа, файлы из брифа | задача по текстовому описанию; эскалация после 3 неудачных раундов |
 | `task-reviewer` | subagent, hidden | fast | — | ничего | ревью задачи: два вердикта |

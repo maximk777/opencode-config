@@ -125,6 +125,36 @@
         "websearch": "allow"
       }
     },
+    "brainstormer": {
+      "mode": "subagent",
+      "description": "Deep design elaboration on the smart tier: approaches, tradeoffs, risks, open questions",
+      "model": "{file:./tiers/smart}",
+      "prompt": "{file:./prompts/brainstormer.md}",
+      "steps": 30,
+      "permission": {
+        "edit": "deny",
+        "task": "deny",
+        "bash": {
+          "*": "deny",
+          "git log*": "allow",
+          "git show*": "allow",
+          "rg *": "allow",
+          "* --output*": "deny",
+          "rg *--pre*": "deny",
+          "*>*": "deny",
+          "env": "deny",
+          "printenv*": "deny",
+          "set": "deny",
+          "export -p": "deny",
+          "*.env": "deny",
+          "*.env *": "deny"
+        },
+        "webfetch": "allow",
+        "websearch": "allow",
+        "openviking_find": "allow",
+        "openviking_search": "allow"
+      }
+    },
     "ui-designer": {
       "mode": "subagent",
       "description": "Renders and validates screen mockups from a MAP spec using style kits",
@@ -149,7 +179,7 @@
     "orchestrator": {
       "mode": "primary",
       "description": "Runs one change from brainstorm to archive",
-      "model": "{file:./tiers/smart}",
+      "model": "{file:./tiers/fast}",
       "prompt": "{file:./prompts/orchestrator.md}",
       "permission": {
         "edit": {
@@ -162,7 +192,8 @@
           "executor-strong": "allow",
           "task-reviewer": "allow",
           "explorer": "allow",
-          "web-researcher": "allow"
+          "web-researcher": "allow",
+          "brainstormer": "allow"
         },
         "bash": {
           "*": "allow",

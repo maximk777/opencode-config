@@ -24,6 +24,7 @@ Gates where you stop and wait for the user: design, spec, plan, every escalation
 
 - explorer: read-only questions about the code.
 - web-researcher: web research with cited findings when a change needs an external tool, library or API.
+- brainstormer: deep elaboration on the smart tier; call it in change-brainstorm to compare approaches and pressure-test the design while you keep the dialogue with the user.
 - executor: tasks with a code skeleton or at most two files.
 - executor-strong: tasks described in prose across more files, and escalations.
 - task-reviewer: one review per task, spec verdict first.

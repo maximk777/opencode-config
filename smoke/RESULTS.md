@@ -115,3 +115,16 @@ commits proposed ok
 go test ok
 SMOKE PASS
 
+## Smoke run 2026-09-22 12:58 --continue
+Duration: 924 s, turns: 2
+head unchanged
+staged files: 8
+tasks checked: 5/5
+reviewer rejected: 2
+fix rounds dispatched: 2
+resumed after reset
+specs commits: 2
+commits proposed ok
+go test ok
+SMOKE PASS
+
