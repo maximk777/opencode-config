@@ -18,6 +18,8 @@ Bootstrap a fresh macOS laptop in one command — installs missing deps (Homebre
 bin/bootstrap
 ```
 
+The OpenViking LLM token (DeepSeek) is optional: an empty answer runs OpenViking in lite mode — local embeddings only, no external LLM calls, no memory extraction and no nightly semantic summaries. Find, spec sync and writes keep working. A later key added to `~/.openviking/.env` plus a rerun of `bin/ov-up` restores full mode.
+
 The pieces it runs, also usable on their own:
 
 Link the skills, agents and rules into [Claude Code](https://claude.com/claude-code):

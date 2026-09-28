@@ -27,11 +27,16 @@ def read_env(path):
 
 
 def render_config(template_text, env):
-    # Values land inside JSON string literals, so they are JSON-escaped and the result is parsed to fail before writing.
-    escaped = {k: json.dumps(v)[1:-1] for k, v in env.items()}
+    # Values land inside JSON string literals, so they are JSON-escaped and the result is parsed
+    # to fail before writing. An empty or missing DEEPSEEK_API_KEY selects lite mode: the vlm
+    # section is dropped, so the server runs on local embeddings only, never calling an external LLM.
+    full_env = {**env, "DEEPSEEK_API_KEY": env.get("DEEPSEEK_API_KEY", "")}
+    escaped = {k: json.dumps(v)[1:-1] for k, v in full_env.items()}
     text = string.Template(template_text).substitute(escaped)
-    json.loads(text)
-    return text
+    conf = json.loads(text)
+    if not full_env["DEEPSEEK_API_KEY"].strip("'\""):
+        conf.pop("vlm", None)
+    return json.dumps(conf, indent=2) + "\n"
 
 
 def write_private(path, text):
@@ -213,7 +218,8 @@ def main(run=subprocess.run, home=None, sleep=time.sleep):
     if compose_result.returncode != 0:
         print(f"ov-up: docker compose failed with exit {compose_result.returncode}", file=sys.stderr)
         sys.exit(compose_result.returncode)
-    print("OpenViking: started")
+    mode = "lite, no vlm" if not env.get("DEEPSEEK_API_KEY", "").strip("'\"") else "full"
+    print(f"OpenViking: started ({mode})")
     all_ok = True
     statuses = install_agents(run, LAUNCHD, AGENTS_DIR, str(home), os.getuid(), sleep=sleep)
     for name, status in statuses:

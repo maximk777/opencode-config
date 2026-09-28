@@ -1,6 +1,7 @@
 import contextlib
 import importlib.machinery
 import io
+import json
 import os
 import plistlib
 import re
@@ -673,7 +674,12 @@ class Main(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(
             out.getvalue().splitlines(),
-            ["OpenViking: started", "ov-studio: ok", "ov-syncd: installed", "login items: ok"],
+            [
+                "OpenViking: started (full)",
+                "ov-studio: ok",
+                "ov-syncd: installed",
+                "login items: ok",
+            ],
         )
         key_path = home / ".openviking" / "mcp-key"
         self.assertEqual(key_path.read_text(), "k")
@@ -683,6 +689,32 @@ class Main(unittest.TestCase):
             ["docker", "compose", "-f", str(REPO / "openviking" / "docker-compose.yml"), "up", "-d"],
             calls,
         )
+
+    def test_success_lite_mode_without_deepseek_drops_vlm(self):
+        home = self._tmp_home()
+        (home / ".openviking" / ".env").write_text("OPENVIKING_API_KEY=k\nOPENVIKING_ROOT_KEY=r\n")
+        calls = []
+
+        def fake(argv, **kwargs):
+            calls.append(argv)
+            if argv[:2] == ["ollama", "pull"]:
+                return Result(0)
+            if argv[:2] == ["docker", "compose"]:
+                return Result(0)
+            if argv[:2] == ["osascript", "-e"]:
+                return Result(0, stdout="Docker, Ollama\n")
+            raise AssertionError(f"unexpected argv {argv}")
+
+        with self._patched(self._agents_dir(), [("ov-studio", "ok"), ("ov-syncd", "installed")]):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                code = U.main(run=fake, home=home)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue().splitlines()[0], "OpenViking: started (lite, no vlm)")
+        conf = json.loads((home / ".openviking" / "ov.conf").read_text())
+        self.assertNotIn("vlm", conf)
+        self.assertEqual(conf["embedding"]["dense"]["model"], "bge-m3")
+        self.assertIn(["ollama", "pull", "bge-m3"], calls)
 
     def test_login_item_add_failure_still_runs_compose_and_returns_one(self):
         home = self._tmp_home()

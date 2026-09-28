@@ -21,6 +21,19 @@ class OpenVikingConfig(unittest.TestCase):
         self.assertEqual(conf["vlm"]["model"], "deepseek-flash")
         self.assertEqual(conf["vlm"]["api_base"], "https://api.deepseek.com")
 
+    def test_empty_deepseek_key_drops_vlm(self):
+        conf = json.loads(OV.render_config(TEMPLATE, {"OPENVIKING_ROOT_KEY": "x", "DEEPSEEK_API_KEY": ""}))
+        self.assertNotIn("vlm", conf)
+        self.assertEqual(conf["embedding"]["dense"]["model"], "bge-m3")
+
+    def test_missing_deepseek_key_drops_vlm(self):
+        conf = json.loads(OV.render_config(TEMPLATE, {"OPENVIKING_ROOT_KEY": "x"}))
+        self.assertNotIn("vlm", conf)
+
+    def test_quoted_empty_deepseek_key_still_lite(self):
+        conf = json.loads(OV.render_config(TEMPLATE, {"OPENVIKING_ROOT_KEY": "x", "DEEPSEEK_API_KEY": '""'}))
+        self.assertNotIn("vlm", conf)
+
     def test_no_zai_subscription_key(self):
         for f in Path("openviking").rglob("*"):
             if not f.is_file():

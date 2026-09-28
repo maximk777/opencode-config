@@ -1,6 +1,7 @@
 """Nightly usage snapshot and capped summary reindex of changed directories."""
 from __future__ import annotations
 
+import json
 import posixpath
 import subprocess
 from datetime import datetime
@@ -123,6 +124,16 @@ def _number(value, default):
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else default
 
 
+def vlm_enabled(paths: state.Paths) -> bool:
+    """False when the rendered ov.conf has no vlm section (lite bootstrap); unreadable counts as enabled."""
+    try:
+        conf = json.loads((paths.ov / "ov.conf").read_text())
+    except (OSError, ValueError):
+        return True
+    vlm = conf.get("vlm")
+    return isinstance(vlm, dict) and bool(vlm.get("provider") or vlm.get("model"))
+
+
 def run_nightly(paths: state.Paths, run: Callable, clock: Callable, sleep: Callable,
                 now_local: Callable[[], datetime], projects: List[str]) -> dict:
     """Snapshot, then reindex pending directories across projects under one daily estimate and actual cap."""
@@ -139,6 +150,14 @@ def run_nightly(paths: state.Paths, run: Callable, clock: Callable, sleep: Calla
     summary = {"date": today, "unavailable": bool(snap.get("unavailable")), "reindexed": {}}
     if snap.get("unavailable"):
         # OpenViking itself is down; retry on the next day's tick rather than a timed retry.
+        nightly_state["last_date"] = today
+        state.write_nightly(paths, nightly_state)
+        return summary
+
+    if not vlm_enabled(paths):
+        # Lite mode: semantic reindex needs the VLM, so the snapshot above is the whole night.
+        # Pending directories stay listed, so adding a key later catches up.
+        state.append_log(paths, "_nightly", "skipped", "no vlm in ov.conf, semantic reindex disabled")
         nightly_state["last_date"] = today
         state.write_nightly(paths, nightly_state)
         return summary

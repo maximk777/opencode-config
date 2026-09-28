@@ -539,6 +539,63 @@ class RunNightlyTestCase(unittest.TestCase):
         nightly_state = state.read_nightly(self.paths)
         self.assertEqual(nightly_state["last_date"], "2026-09-15")
 
+    def test_lite_mode_records_snapshot_but_skips_reindex(self):
+        self.paths.ov.mkdir(parents=True, exist_ok=True)
+        (self.paths.ov / "ov.conf").write_text(json.dumps({"server": {}, "embedding": {}}))
+        self.write_project_state(
+            "demo",
+            reindex_pending=["architecture/adr"],
+            synced_commit="s2",
+            reindexed_commit=None,
+        )
+        self.make_mirror_files("demo", "architecture/adr", 1)
+        run = FakeRun(start_vlm=100, step=1)
+
+        summary = nightly.run_nightly(
+            self.paths, run, clock=lambda: 0.0, sleep=lambda s: None,
+            now_local=lambda: self.now, projects=["demo"],
+        )
+
+        self.assertEqual(run.attempted, [])
+        self.assertEqual(summary, {"date": "2026-09-15", "unavailable": False, "reindexed": {}})
+        self.assertEqual(
+            self.snapshot_lines(),
+            [{
+                "date": "2026-09-15",
+                "vlm_calls": 100,
+                "embedding_calls": 3804,
+                "retrieval_queries": 123,
+                "add_resource_tasks": 0,
+            }],
+        )
+        # Pending stays listed so that adding a vlm key later catches up.
+        st = state.read_state(self.paths, "demo")
+        self.assertEqual(st["reindex_pending"], ["architecture/adr"])
+        nightly_state = state.read_nightly(self.paths)
+        self.assertEqual(nightly_state["last_date"], "2026-09-15")
+        self.assertIn("no vlm in ov.conf", self.paths.log.read_text())
+
+    def test_full_mode_reindex_still_runs_with_vlm_in_conf(self):
+        self.paths.ov.mkdir(parents=True, exist_ok=True)
+        (self.paths.ov / "ov.conf").write_text(
+            json.dumps({"vlm": {"provider": "openai", "model": "deepseek-flash"}})
+        )
+        self.write_project_state(
+            "demo",
+            reindex_pending=["architecture/adr"],
+            synced_commit="s2",
+            reindexed_commit=None,
+        )
+        self.make_mirror_files("demo", "architecture/adr", 1)
+        run = FakeRun(start_vlm=100, step=1)
+
+        nightly.run_nightly(
+            self.paths, run, clock=lambda: 0.0, sleep=lambda s: None,
+            now_local=lambda: self.now, projects=["demo"],
+        )
+
+        self.assertEqual(run.attempted, ["architecture/adr"])
+
     def test_estimate_cap_is_shared_across_projects_in_name_order(self):
         self.write_project_state("p1", reindex_pending=["big"], synced_commit="s1", reindexed_commit=None)
         self.write_project_state("p2", reindex_pending=["small"], synced_commit="s1", reindexed_commit=None)
