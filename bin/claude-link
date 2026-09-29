@@ -115,7 +115,10 @@ def mcp_json(repo):
     return json.dumps({"type": "http", "url": "http://127.0.0.1:1933/mcp", "headersHelper": str(repo / "bin" / "ov-mcp-headers")})
 
 
-def ensure_mcp(repo, dry_run=False):
+def ensure_mcp(repo, home, dry_run=False):
+    # Without memory (~/.openviking/mcp-key absent) Claude Code must not look for OpenViking at all.
+    if not (home / ".openviking" / "mcp-key").exists():
+        return []
     if not shutil.which("claude") or subprocess.run(["claude", "mcp", "get", "openviking"], capture_output=True).returncode == 0:
         return []
     if not dry_run:
@@ -126,7 +129,7 @@ def ensure_mcp(repo, dry_run=False):
 if __name__ == "__main__":
     dry_run = "--dry-run" in sys.argv
     done, refused = apply(REPO, Path.home() / ".claude", dry_run=dry_run)
-    done += ensure_mcp(REPO, dry_run)
+    done += ensure_mcp(REPO, Path.home(), dry_run)
     print("\n".join(done) or "claude-link: nothing to change")
     if refused:
         print("\n".join(refused), file=sys.stderr)

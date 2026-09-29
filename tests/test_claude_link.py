@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 L = importlib.machinery.SourceFileLoader("claude_link", "bin/claude-link").load_module()
@@ -100,6 +101,34 @@ class McpHelper(unittest.TestCase):
         self.assertEqual(cfg["type"], "http")
         self.assertTrue(cfg["headersHelper"].endswith("bin/ov-mcp-headers"))
         self.assertNotIn("Authorization", json.dumps(cfg))
+
+
+class EnsureMcp(unittest.TestCase):
+    def setUp(self):
+        self.home = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.home, ignore_errors=True)
+
+    def test_skips_without_memory(self):
+        with unittest.mock.patch.object(L.shutil, "which", return_value="/usr/bin/claude"):
+            self.assertEqual(L.ensure_mcp(REPO, self.home), [])
+
+    def test_registers_with_memory(self):
+        (self.home / ".openviking").mkdir()
+        (self.home / ".openviking" / "mcp-key").write_text("k")
+        calls = []
+
+        def fake_run(argv, **kw):
+            calls.append(argv)
+            return subprocess.CompletedProcess(argv, 0 if argv[1:2] == ["mcp"] and argv[2:3] == ["get"] else 1)
+
+        with unittest.mock.patch.object(L.shutil, "which", return_value="/usr/bin/claude"), \
+                unittest.mock.patch.object(L.subprocess, "run", side_effect=fake_run):
+            done = L.ensure_mcp(REPO, self.home)
+        self.assertEqual(done, ["mcp openviking (user scope, headersHelper)"])
+        self.assertEqual(calls[0][:3], ["claude", "mcp", "get"])
+        self.assertEqual(calls[1][:3], ["claude", "mcp", "add-json"])
 
 
 class ChangeContext(unittest.TestCase):

@@ -26,6 +26,23 @@ else:
 path.write_text("\n".join(lines) + "\n")
 PY
 }
+set_memory_mcp() { # true|false: keep mcp.openviking.enabled in opencode.json matching the memory choice
+  python3 - "$REPO/opencode.json" "$1" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+conf = json.loads(path.read_text())
+enabled = sys.argv[2] == "true"
+mcp = conf.get("mcp", {}).get("openviking")
+if mcp is None or mcp.get("enabled") is enabled:
+    raise SystemExit(0)
+mcp["enabled"] = enabled
+path.write_text(json.dumps(conf, indent=2, ensure_ascii=False) + "\n")
+print("opencode.json: mcp openviking " + ("enabled" if enabled else "disabled, no memory"))
+PY
+}
 
 # Memory (OpenViking with Docker and Ollama) is optional: --no-memory or OV_MEMORY=no
 # skips it entirely, OV_MEMORY=yes forces it, otherwise a fresh run asks.
@@ -299,7 +316,9 @@ for user in data.get("result", []):
     http://127.0.0.1:1933/api/v1/system/status)"
   [ "$code" = "200" ] || die "mcp-key rejected (HTTP $code)"
   echo "mcp-key accepted (HTTP 200)"
+  set_memory_mcp true
 else
+  set_memory_mcp false
   echo "memory off: skipping OpenViking, its launch agents and the mcp key"
 fi
 
