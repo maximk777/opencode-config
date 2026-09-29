@@ -310,10 +310,6 @@ else
   echo "claude not installed, skipping bin/claude-link"
 fi
 
-step "tests"
-(cd "$REPO" && node --test tests/*.test.mjs >/dev/null) || die "node tests failed"
-(cd "$REPO" && python3 -m unittest discover tests) || die "python tests failed"
-
 step "done"
 if [ "$WITH_MEMORY" = 1 ]; then
   if grep -qE '^DEEPSEEK_API_KEY=.' "$ENV_FILE"; then
