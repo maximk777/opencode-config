@@ -12,11 +12,13 @@ An [OpenCode](https://opencode.ai) configuration: a change-flow orchestrator, sk
 
 ## Installation
 
-Bootstrap a fresh macOS laptop in one command — installs missing deps (Homebrew, node, python, Docker Desktop, Ollama, opencode), creates a private OpenViking with its own keys, asks for the account name and provider tokens, installs the launch agents:
+Bootstrap a fresh macOS laptop in one command — installs missing deps (Homebrew, node, python, opencode; plus Docker Desktop and Ollama when memory is on), optionally creates a private OpenViking with its own keys, asks for the account name and provider tokens, installs the launch agents:
 
 ```sh
 bin/bootstrap
 ```
+
+Memory is optional: `bin/bootstrap --no-memory` (or `OV_MEMORY=no`) skips OpenViking entirely — no Docker Desktop, no Ollama, no launch agents, opencode just runs without memory. On a fresh machine an interactive run also asks. A later plain rerun of `bin/bootstrap` adds the memory stack on top; an existing `~/.openviking` is never touched by `--no-memory`.
 
 The OpenViking LLM token (DeepSeek) is optional: an empty answer runs OpenViking in lite mode — local embeddings only, no external LLM calls, no memory extraction and no nightly semantic summaries. Find, spec sync and writes keep working. A later key added to `~/.openviking/.env` plus a rerun of `bin/ov-up` restores full mode.
 
