@@ -121,7 +121,8 @@ class EnsureMcp(unittest.TestCase):
 
         def fake_run(argv, **kw):
             calls.append(argv)
-            return subprocess.CompletedProcess(argv, 0 if argv[1:2] == ["mcp"] and argv[2:3] == ["get"] else 1)
+            # `claude mcp get` exit 1 = not registered yet, so the helper proceeds to add-json.
+            return subprocess.CompletedProcess(argv, 1)
 
         with unittest.mock.patch.object(L.shutil, "which", return_value="/usr/bin/claude"), \
                 unittest.mock.patch.object(L.subprocess, "run", side_effect=fake_run):

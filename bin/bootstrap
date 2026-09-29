@@ -26,7 +26,9 @@ else:
 path.write_text("\n".join(lines) + "\n")
 PY
 }
-set_memory_mcp() { # true|false: keep mcp.openviking.enabled in opencode.json matching the memory choice
+set_memory_mcp() { # true|false: add or remove the mcp.openviking entry in opencode.json
+  # The entry must be removed, not disabled: opencode validates {file:} header refs
+  # before looking at enabled, so a missing mcp-key makes the whole config invalid.
   python3 - "$REPO/opencode.json" "$1" <<'PY'
 import json
 import pathlib
@@ -34,14 +36,37 @@ import sys
 
 path = pathlib.Path(sys.argv[1])
 conf = json.loads(path.read_text())
-enabled = sys.argv[2] == "true"
-mcp = conf.get("mcp", {}).get("openviking")
-if mcp is None or mcp.get("enabled") is enabled:
-    raise SystemExit(0)
-mcp["enabled"] = enabled
+entry = {
+    "type": "remote",
+    "url": "http://127.0.0.1:1933/mcp",
+    "headers": {"Authorization": "Bearer {file:~/.openviking/mcp-key}"},
+    "enabled": True,
+    "oauth": False,
+}
+mcp = conf.setdefault("mcp", {})
+if sys.argv[2] == "true":
+    if mcp.get("openviking") == entry:
+        raise SystemExit(0)
+    mcp["openviking"] = entry
+    change = "opencode.json: mcp openviking added"
+else:
+    if mcp.pop("openviking", None) is None:
+        raise SystemExit(0)
+    if not mcp:
+        conf.pop("mcp", None)
+    change = "opencode.json: mcp openviking removed, no memory"
 path.write_text(json.dumps(conf, indent=2, ensure_ascii=False) + "\n")
-print("opencode.json: mcp openviking " + ("enabled" if enabled else "disabled, no memory"))
+print(change)
 PY
+}
+remove_memory_agents() { # unload and delete ov-studio/ov-syncd LaunchAgents left by an earlier memory install
+  LA="$HOME/Library/LaunchAgents"
+  for target in "$LA/opencode.ov-studio.plist" "$LA/opencode.ov-syncd.plist"; do
+    [ -e "$target" ] || continue
+    launchctl bootout "gui/$(id -u)/$(basename "$target" .plist)" >/dev/null 2>&1 || true
+    rm -f "$target" || die "cannot remove $target"
+    echo "removed launch agent $(basename "$target" .plist)"
+  done
 }
 
 # Memory (OpenViking with Docker and Ollama) is optional: --no-memory or OV_MEMORY=no
@@ -319,12 +344,17 @@ for user in data.get("result", []):
   set_memory_mcp true
 else
   set_memory_mcp false
+  remove_memory_agents
   echo "memory off: skipping OpenViking, its launch agents and the mcp key"
 fi
 
 step "claude link"
 if command -v claude >/dev/null; then
-  "$REPO/bin/claude-link"
+  if [ "$WITH_MEMORY" = 1 ]; then
+    "$REPO/bin/claude-link"
+  else
+    "$REPO/bin/claude-link" --no-memory
+  fi
 else
   echo "claude not installed, skipping bin/claude-link"
 fi

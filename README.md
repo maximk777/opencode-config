@@ -18,7 +18,7 @@ Bootstrap a fresh macOS laptop in one command — installs missing deps (Homebre
 bin/bootstrap
 ```
 
-Memory is optional: `bin/bootstrap --no-memory` (or `OV_MEMORY=no`) skips OpenViking entirely — no Docker Desktop, no Ollama, no launch agents, opencode just runs without memory. On a fresh machine an interactive run also asks. A later plain rerun of `bin/bootstrap` adds the memory stack on top; an existing `~/.openviking` is never touched by `--no-memory`.
+Memory is optional: `bin/bootstrap --no-memory` (or `OV_MEMORY=no`) skips OpenViking entirely — no Docker Desktop, no Ollama, no launch agents, opencode just runs without memory. It also removes the `mcp.openviking` entry from `opencode.json` (a local git modification) and skips the Claude Code MCP registration, so nothing looks for OpenViking at startup; a rerun with memory restores the entry. On a fresh machine an interactive run also asks. A later plain rerun of `bin/bootstrap` adds the memory stack on top; `--no-memory` on a machine where memory was installed before acts as a repair — it unloads and deletes the `opencode.ov-studio`/`opencode.ov-syncd` launch agents and unregisters the Claude Code MCP, while the `~/.openviking` data is kept.
 
 The OpenViking LLM token (DeepSeek) is optional: an empty answer runs OpenViking in lite mode — local embeddings only, no external LLM calls, no memory extraction and no nightly semantic summaries. Find, spec sync and writes keep working. A later key added to `~/.openviking/.env` plus a rerun of `bin/ov-up` restores full mode.
 

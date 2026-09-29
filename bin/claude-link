@@ -126,10 +126,20 @@ def ensure_mcp(repo, home, dry_run=False):
     return ["mcp openviking (user scope, headersHelper)"]
 
 
+def remove_mcp(dry_run=False):
+    # --no-memory repair: drop the openviking MCP a previous memory install registered.
+    if not shutil.which("claude") or subprocess.run(["claude", "mcp", "get", "openviking"], capture_output=True).returncode != 0:
+        return []
+    if not dry_run:
+        subprocess.run(["claude", "mcp", "remove", "openviking", "-s", "user"], check=False, capture_output=True)
+    return ["claude: openviking mcp removed"]
+
+
 if __name__ == "__main__":
     dry_run = "--dry-run" in sys.argv
+    no_memory = "--no-memory" in sys.argv
     done, refused = apply(REPO, Path.home() / ".claude", dry_run=dry_run)
-    done += ensure_mcp(REPO, Path.home(), dry_run)
+    done += remove_mcp(dry_run) if no_memory else ensure_mcp(REPO, Path.home(), dry_run)
     print("\n".join(done) or "claude-link: nothing to change")
     if refused:
         print("\n".join(refused), file=sys.stderr)
