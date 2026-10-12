@@ -17,7 +17,14 @@ function walk(dir, out = []) {
   for (const n of readdirSync(dir)) {
     if ([".git", "node_modules", "export", "static", "tests", "__pycache__"].includes(n)) continue;
     const p = join(dir, n);
-    statSync(p).isDirectory() ? walk(p, out) : out.push(p);
+    if (statSync(p).isDirectory()) {
+      walk(p, out);
+    } else {
+      // Secret-bearing local files (.env and friends) are gitignored on purpose;
+      // the scan guards what could be committed or published.
+      if (n.endsWith(".env") || n.startsWith(".env.")) continue;
+      out.push(p);
+    }
   }
   return out;
 }

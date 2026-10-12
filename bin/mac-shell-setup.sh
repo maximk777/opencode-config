@@ -151,10 +151,10 @@ if [[ -n "$WEZTERM_PANE" || "$TERM_PROGRAM" == "WezTerm" ]]; then
   PS1="%{$(__wezterm_prompt_end)%}$PS1"
 fi
 
-# --- opencode-setup keys: DEEPSEEK_API_KEY for the deepseek provider still lives in
-# the legacy ~/.openviking/.env; the block is inert while that file is absent.
-if [ -f "$HOME/.openviking/.env" ]; then
-  export DEEPSEEK_API_KEY="$(grep '^DEEPSEEK_API_KEY=' "$HOME/.openviking/.env" 2>/dev/null | cut -d= -f2-)"
+# --- opencode-setup keys: DEEPSEEK_API_KEY for the deepseek provider lives in
+# ~/.config/opencode/.env (600); the block is inert while that file is absent.
+if [ -f "$HOME/.config/opencode/.env" ]; then
+  export DEEPSEEK_API_KEY="$(grep '^DEEPSEEK_API_KEY=' "$HOME/.config/opencode/.env" 2>/dev/null | cut -d= -f2-)"
 fi
 ZSHRC
 

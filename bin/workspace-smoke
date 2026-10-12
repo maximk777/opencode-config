@@ -286,7 +286,7 @@ def opencode_env(run_dir, shim_dir, config_dir, directory):
     xdg = run_dir / "xdg"
     xdg.mkdir(exist_ok=True)
     # Like bin/smoke-run, variables already exported by the caller win over the .env file.
-    env = dict(dotenv(Path.home() / ".openviking/.env"))
+    env = dict(dotenv(Path.home() / ".config/opencode/.env"))
     env.update(os.environ)
     # XDG_CONFIG_HOME keeps the global ~/.config/opencode from loading; XDG_DATA_HOME stays so provider logins remain.
     # subprocess cwd does not update PWD, and opencode takes its session directory from PWD.

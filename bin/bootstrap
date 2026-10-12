@@ -77,6 +77,31 @@ fi
 
 mkdir -p "$HOME/specs"
 
+step "DEEPSEEK key for the deepseek provider (optional)"
+env_file="$REPO/.env"
+have_key() { grep -qE '^DEEPSEEK_API_KEY=.' "$env_file" 2>/dev/null; }
+if [ -n "${DEEPSEEK_API_KEY:-}" ] || have_key; then
+  echo "keeping the existing DEEPSEEK_API_KEY"
+elif [ -f "$HOME/.openviking/.env" ] && grep -qE '^DEEPSEEK_API_KEY=.' "$HOME/.openviking/.env"; then
+  umask 077
+  grep '^DEEPSEEK_API_KEY=' "$HOME/.openviking/.env" >> "$env_file"
+  chmod 600 "$env_file"
+  echo "moved DEEPSEEK_API_KEY from the retired ~/.openviking/.env"
+else
+  printf 'DEEPSEEK_API_KEY (input hidden, empty = skip, add later to %s): ' "$env_file"
+  read -rs deepseek_key
+  echo
+  if [ -n "$deepseek_key" ]; then
+    umask 077
+    printf 'DEEPSEEK_API_KEY=%s\n' "$deepseek_key" >> "$env_file"
+    chmod 600 "$env_file"
+    unset deepseek_key
+    echo "DEEPSEEK_API_KEY saved to $env_file"
+  else
+    echo "no DEEPSEEK_API_KEY: the deepseek provider stays disabled until the key is added"
+  fi
+fi
+
 # Retired OpenViking integration: unload its launch agents and unregister its MCP
 # in Claude Code when a memory install left them behind. Data in ~/.openviking
 # and the DeepSeek key inside its .env are kept.
