@@ -180,7 +180,7 @@
       "permission": {
         "edit": {
           "*": "deny",
-          "../*specs/*": "allow"
+          "~/specs/**": "allow"
         },
         "task": {
           "*": "deny",
@@ -265,7 +265,7 @@
       "permission": {
         "edit": {
           "*": "deny",
-          "../*specs/*/reports/*": "allow"
+          "~/specs/*/openspec/changes/*/reports/**": "allow"
         },
         "task": "deny",
         "bash": {
@@ -295,7 +295,7 @@
       "permission": {
         "edit": {
           "*": "deny",
-          "../*specs/*/architecture/*": "allow"
+          "~/specs/*/architecture/**": "allow"
         },
         "task": {
           "*": "deny",
@@ -327,7 +327,7 @@
       "permission": {
         "edit": {
           "*": "deny",
-          "../*specs/*/harness/*": "allow"
+          "~/specs/*/harness/**": "allow"
         },
         "task": {
           "*": "deny",

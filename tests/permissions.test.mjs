@@ -138,11 +138,13 @@ test("only the orchestrator keeps the todo list", () => {
 });
 
 test("edits stay in the specs tree outside the work repository", () => {
-  expectAll("orchestrator", "edit", "allow", ["../../../specs/p/openspec/changes/x/tasks.md", "../specs/openspec/changes/x/briefs/1.1.md"]);
-  expectAll("orchestrator", "edit", "deny", ["internal/specs/x.go", "specs/a.md", "main.go"]);
-  expectAll("task-reviewer", "edit", "allow", ["../../specs/p/openspec/changes/x/reports/1.1.md"]);
-  expectAll("task-reviewer", "edit", "deny", ["reports/x.md", "internal/reports/x.go", "../../specs/p/openspec/changes/x/tasks.md"]);
-  expectAll("architect", "edit", "allow", ["../../specs/p/architecture/adr/0001.md"]);
+  // V2 canonicalizes external edit targets to absolute paths and expands ~ in rules,
+  // so both sides meet as ${HOME}/specs/...
+  expectAll("orchestrator", "edit", "allow", [`${HOME}/specs/p/openspec/changes/x/tasks.md`, `${HOME}/specs/openspec/changes/x/briefs/1.1.md`]);
+  expectAll("orchestrator", "edit", "deny", ["internal/specs/x.go", "specs/a.md", "main.go", "~/specs/p/openspec/changes/x/tasks.md"]);
+  expectAll("task-reviewer", "edit", "allow", [`${HOME}/specs/p/openspec/changes/x/reports/1.1.md`]);
+  expectAll("task-reviewer", "edit", "deny", ["reports/x.md", "internal/reports/x.go", `${HOME}/specs/p/openspec/changes/x/tasks.md`]);
+  expectAll("architect", "edit", "allow", [`${HOME}/specs/p/architecture/adr/0001.md`]);
   expectAll("architect", "edit", "deny", ["architecture/x.md", "docs/specs/p/architecture/x.md"]);
   expectAll("harness-builder", "edit", "deny", ["x.harness-probe-1", "specs/p/harness/x.md"]);
   expectAll("setup-improver", "edit", "allow", ["prompts/orchestrator.md"]);
