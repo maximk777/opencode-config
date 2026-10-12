@@ -4,4 +4,5 @@ node_modules/
 __pycache__/
 /smoke/out/
 /migration/export/
+/keys/
 /service.json

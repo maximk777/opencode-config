@@ -60,7 +60,7 @@
       "name": "DeepSeek API",
       "options": {
         "baseURL": "https://api.deepseek.com",
-        "apiKey": "{env:DEEPSEEK_API_KEY}"
+        "apiKey": "{file:~/.config/opencode/keys/deepseek}"
       },
       "models": {
         "deepseek-flash": {

@@ -260,34 +260,11 @@ def write_config(run_dir, model):
     return directory
 
 
-def dotenv(path):
-    """Parse KEY=VALUE lines silently; names and values are never printed."""
-    values = {}
-    if not path.is_file():
-        return values
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        if key.startswith("export "):
-            key = key[len("export "):].strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        if key:
-            values[key] = value
-    return values
-
-
 def opencode_env(run_dir, shim_dir, config_dir, directory):
     """Build the child environment for `opencode run` in directory."""
     xdg = run_dir / "xdg"
     xdg.mkdir(exist_ok=True)
-    # Like bin/smoke-run, variables already exported by the caller win over the .env file.
-    env = dict(dotenv(Path.home() / ".config/opencode/.env"))
-    env.update(os.environ)
+    env = dict(os.environ)
     # XDG_CONFIG_HOME keeps the global ~/.config/opencode from loading; XDG_DATA_HOME stays so provider logins remain.
     # subprocess cwd does not update PWD, and opencode takes its session directory from PWD.
     env.update(

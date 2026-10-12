@@ -15,7 +15,7 @@ const SECRETS = [
 
 function walk(dir, out = []) {
   for (const n of readdirSync(dir)) {
-    if ([".git", "node_modules", "export", "static", "tests", "__pycache__"].includes(n)) continue;
+    if ([".git", "node_modules", "export", "static", "tests", "__pycache__", "keys"].includes(n)) continue;
     const p = join(dir, n);
     if (statSync(p).isDirectory()) {
       walk(p, out);

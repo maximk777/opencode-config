@@ -19,16 +19,16 @@ test("tier files hold one provider/model line", () => {
   }
 });
 
-test("provider keys come from the environment", () => {
+test("provider keys never sit in the config as literals", () => {
   for (const [id, p] of Object.entries(cfg().provider ?? {})) {
     const key = p.options?.apiKey;
-    if (key !== undefined) assert.match(key, /^\{env:[A-Z0-9_]+\}$/, id);
+    if (key !== undefined) assert.match(key, /^\{(env|file):[^}]+\}$/, id);
   }
 });
 
 function walk(dir, out = []) {
   for (const n of readdirSync(dir)) {
-    if ([".git", "node_modules", "tests"].includes(n)) continue;
+    if ([".git", "node_modules", "tests", "keys"].includes(n)) continue;
     const p = join(dir, n);
     statSync(p).isDirectory() ? walk(p, out) : out.push(p);
   }
