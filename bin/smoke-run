@@ -28,7 +28,7 @@ ln -sfn "$RUN/specs" "$HOME/specs/opencode-smoke"
 trap 'rm -f "$HOME/specs/opencode-smoke"' EXIT
 
 # Only the keys the config references; the root key stays in the file.
-for k in OPENVIKING_API_KEY DEEPSEEK_API_KEY; do
+for k in DEEPSEEK_API_KEY; do
   [[ -n "${!k:-}" ]] || export "$k=$(grep -E "^$k=" "$HOME/.openviking/.env" 2>/dev/null | head -1 | cut -d= -f2- | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//')"
 done
 CFG="${OPENCODE_CONFIG_DIR:-$REPO}"

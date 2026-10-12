@@ -16,10 +16,7 @@ MODELS = {"smart": "opus", "fast": "sonnet"}
 TOOLS = {"explorer": "Read, Grep, Glob, Bash", "task-reviewer": "Read, Grep, Glob, Bash, Edit"}
 PLUGINS_OFF = ["magent@magent", "magent-lang@magent", "humanizer@humanizer"]
 HOOK_COMMAND = "~/.config/opencode/bin/claude-change-context"
-DENY = ["Read(~/.openviking/.env)", "Read(**/.env)", "Bash(printenv:*)", "Bash(env)", "Bash(opencode debug config:*)"]
-
-
-OPENVIKING_READ_TOOLS = ("find", "search")
+DENY = ["Read(**/.env)", "Bash(printenv:*)", "Bash(env)", "Bash(opencode debug config:*)"]
 
 
 def permission_value(perm, key):
@@ -31,20 +28,11 @@ def permission_value(perm, key):
     return value
 
 
-def openviking_tools(spec):
-    """openviking_<tool> permissions resolved to allow, sorted so the generated tools line is deterministic."""
-    perm = spec.get("permission", {})
-    exact = {m.group(1) for m in (re.fullmatch(r"openviking_(\w+)", k) for k in perm) if m}
-    candidates = sorted(set(OPENVIKING_READ_TOOLS) | exact)
-    return [t for t in candidates if permission_value(perm, f"openviking_{t}") == "allow"]
-
-
 def agent_text(name, spec, prompt):
     tier = re.search(r"tiers/([a-z]+)", spec["model"]).group(1)
     front = ["---", f"name: {name}", f"description: {json.dumps(spec['description'])}", f"model: {MODELS[tier]}"]
     if name in TOOLS:
-        tools = TOOLS[name].split(", ") + [f"mcp__openviking__{t}" for t in openviking_tools(spec)]
-        front.append(f"tools: {', '.join(tools)}")
+        front.append(f"tools: {TOOLS[name]}")
     return "\n".join(front + ["---", MARK, "", prompt.rstrip("\n"), ""])
 
 
@@ -111,35 +99,9 @@ def apply(repo, home, dry_run=False):
     return done, refused
 
 
-def mcp_json(repo):
-    return json.dumps({"type": "http", "url": "http://127.0.0.1:1933/mcp", "headersHelper": str(repo / "bin" / "ov-mcp-headers")})
-
-
-def ensure_mcp(repo, home, dry_run=False):
-    # Without memory (~/.openviking/mcp-key absent) Claude Code must not look for OpenViking at all.
-    if not (home / ".openviking" / "mcp-key").exists():
-        return []
-    if not shutil.which("claude") or subprocess.run(["claude", "mcp", "get", "openviking"], capture_output=True).returncode == 0:
-        return []
-    if not dry_run:
-        subprocess.run(["claude", "mcp", "add-json", "-s", "user", "openviking", mcp_json(repo)], check=True, capture_output=True)
-    return ["mcp openviking (user scope, headersHelper)"]
-
-
-def remove_mcp(dry_run=False):
-    # --no-memory repair: drop the openviking MCP a previous memory install registered.
-    if not shutil.which("claude") or subprocess.run(["claude", "mcp", "get", "openviking"], capture_output=True).returncode != 0:
-        return []
-    if not dry_run:
-        subprocess.run(["claude", "mcp", "remove", "openviking", "-s", "user"], check=False, capture_output=True)
-    return ["claude: openviking mcp removed"]
-
-
 if __name__ == "__main__":
     dry_run = "--dry-run" in sys.argv
-    no_memory = "--no-memory" in sys.argv
     done, refused = apply(REPO, Path.home() / ".claude", dry_run=dry_run)
-    done += remove_mcp(dry_run) if no_memory else ensure_mcp(REPO, Path.home(), dry_run)
     print("\n".join(done) or "claude-link: nothing to change")
     if refused:
         print("\n".join(refused), file=sys.stderr)

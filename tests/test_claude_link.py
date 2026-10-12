@@ -52,84 +52,14 @@ class ClaudeLink(unittest.TestCase):
         text = L.agent_text("x", {"model": "{file:./tiers/smart}", "description": "Reviews: spec first"}, "body")
         self.assertIn('description: "Reviews: spec first"', text)
 
-    def test_explorer_gets_openviking_read_tools(self):
+    def test_explorer_gets_only_local_tools(self):
         agents = L.plan_agents(REPO)
-        self.assertIn("tools: Read, Grep, Glob, Bash, mcp__openviking__find, mcp__openviking__search", agents["explorer"])
+        self.assertIn("tools: Read, Grep, Glob, Bash", agents["explorer"])
+        self.assertNotIn("mcp__", agents["explorer"])
 
-    def test_agent_without_openviking_permission_gets_no_mcp_tools(self):
-        spec = {"model": "{file:./tiers/fast}", "description": "d"}
-        text = L.agent_text("explorer", spec, "body")
-        self.assertNotIn("mcp__openviking", text)
-        self.assertIn("tools: Read, Grep, Glob, Bash", text)
-
-    def test_ask_deny_and_wildcard_permissions_do_not_add_tools(self):
-        spec = {
-            "model": "{file:./tiers/fast}",
-            "description": "d",
-            "permission": {"openviking_find": "ask", "openviking_search": "deny", "openviking_*": "deny"},
-        }
-        text = L.agent_text("explorer", spec, "body")
-        self.assertNotIn("mcp__openviking", text)
-
-    def test_later_wildcard_deny_overrides_earlier_exact_allow(self):
-        spec = {
-            "model": "{file:./tiers/fast}",
-            "description": "d",
-            "permission": {"openviking_find": "allow", "openviking_*": "deny"},
-        }
-        text = L.agent_text("explorer", spec, "body")
-        self.assertNotIn("mcp__openviking", text)
-
-    def test_later_exact_allow_overrides_earlier_wildcard_deny(self):
-        spec = {
-            "model": "{file:./tiers/fast}",
-            "description": "d",
-            "permission": {"openviking_*": "deny", "openviking_find": "allow"},
-        }
-        text = L.agent_text("explorer", spec, "body")
-        self.assertIn("mcp__openviking__find", text)
-        self.assertNotIn("mcp__openviking__search", text)
-
-    def test_task_reviewer_still_gets_no_openviking_tools(self):
+    def test_task_reviewer_still_gets_no_mcp_tools(self):
         agents = L.plan_agents(REPO)
-        self.assertNotIn("mcp__openviking", agents["task-reviewer"])
-
-
-class McpHelper(unittest.TestCase):
-    def test_mcp_config_uses_headers_helper_without_key(self):
-        cfg = json.loads(L.mcp_json(REPO))
-        self.assertEqual(cfg["type"], "http")
-        self.assertTrue(cfg["headersHelper"].endswith("bin/ov-mcp-headers"))
-        self.assertNotIn("Authorization", json.dumps(cfg))
-
-
-class EnsureMcp(unittest.TestCase):
-    def setUp(self):
-        self.home = Path(tempfile.mkdtemp())
-
-    def tearDown(self):
-        shutil.rmtree(self.home, ignore_errors=True)
-
-    def test_skips_without_memory(self):
-        with unittest.mock.patch.object(L.shutil, "which", return_value="/usr/bin/claude"):
-            self.assertEqual(L.ensure_mcp(REPO, self.home), [])
-
-    def test_registers_with_memory(self):
-        (self.home / ".openviking").mkdir()
-        (self.home / ".openviking" / "mcp-key").write_text("k")
-        calls = []
-
-        def fake_run(argv, **kw):
-            calls.append(argv)
-            # `claude mcp get` exit 1 = not registered yet, so the helper proceeds to add-json.
-            return subprocess.CompletedProcess(argv, 1)
-
-        with unittest.mock.patch.object(L.shutil, "which", return_value="/usr/bin/claude"), \
-                unittest.mock.patch.object(L.subprocess, "run", side_effect=fake_run):
-            done = L.ensure_mcp(REPO, self.home)
-        self.assertEqual(done, ["mcp openviking (user scope, headersHelper)"])
-        self.assertEqual(calls[0][:3], ["claude", "mcp", "get"])
-        self.assertEqual(calls[1][:3], ["claude", "mcp", "add-json"])
+        self.assertNotIn("mcp__", agents["task-reviewer"])
 
 
 class ChangeContext(unittest.TestCase):

@@ -7,5 +7,4 @@ checkSkill("change-spec", [
   "When execution shows the spec is wrong, stop dispatching, amend the delta, validate again, ask the user, then re-plan only the remaining tasks.",
   "Set OPENSPEC_TELEMETRY=0.",
   "After approval, commit the specs repository with",
-  "run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once",
 ]);

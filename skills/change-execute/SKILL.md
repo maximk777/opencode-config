@@ -46,7 +46,6 @@ Where phase_reset is not available, as in Claude Code, do not wait for a reset: 
 
 Accept a task only when the last Verdict line in its report is Verdict: COMPLIANT; if the report has no verdict, dispatch task-reviewer again.
 On acceptance run git add -- <task files> and check the task in tasks.md.
-When a wave is accepted, run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once.
 Never commit in the work repository on your own initiative; at the end propose commits using the commit-message skill, and once the user accepts them, commit and push without asking again.
 If an executor touched a file outside its list, the reviewer flags it; revert that file only with the user's consent.
 
@@ -59,6 +58,5 @@ When execution shows the spec is wrong, stop the wave and switch to the change-s
 The change is not finished until every step below has run, in this order:
 1. After the last wave run the full verification, request a final review of the whole change, then run openspec archive <slug> --yes from ~/specs/<project>.
 2. Archive before proposing commits. Then commit the specs repository with `~/.config/opencode/bin/specs-commit <project> 'docs(<slug>): archive change'`; this commit needs no request from the user.
-3. Run ~/.config/opencode/bin/ov-sync <project>.
-4. Check each proposed message with `printf '%s\n' '<message>' | ~/.config/opencode/bin/check-commit-msg`.
-5. Present to the user: what changed, the verification output, and the proposed commits with their files.
+3. Check each proposed message with `printf '%s\n' '<message>' | ~/.config/opencode/bin/check-commit-msg`.
+4. Present to the user: what changed, the verification output, and the proposed commits with their files.

@@ -9,7 +9,7 @@ Understand a service, measure where it breaks, and propose mostly programmatic g
 ## Steps
 
 1. Profile the service with templates/profile.md: type, criticality, load and concurrency, integrations, existing gates. Use the explorer subagent for code reading.
-2. Measure the error background with templates/error-background.md: run `~/.config/opencode/bin/error-background <repo>`, collect reviewer rejection reasons from archived changes, and read memory.
+2. Measure the error background with templates/error-background.md: run `~/.config/opencode/bin/error-background <repo>` and collect reviewer rejection reasons from archived changes.
 3. Ask clarifying questions one at a time: SLO and load, what the team counts as green, how many CI minutes are acceptable, which error classes hurt most.
 4. Probe suspected weak spots. Run probes in a temporary git worktree, locally, and remove the worktree afterwards.
 5. Choose gates with the profile matrix below and write templates/gates.md.
@@ -39,4 +39,4 @@ Understand a service, measure where it breaks, and propose mostly programmatic g
 
 ## Output location
 
-~/specs/<project>/harness/profile.md, error-background.md, gates.md. After the user accepts the assessment, commit the specs repository and run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once.
+~/specs/<project>/harness/profile.md, error-background.md, gates.md. After the user accepts the assessment, commit the specs repository.

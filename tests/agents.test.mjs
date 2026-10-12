@@ -65,17 +65,8 @@ test("web-researcher is a visible fast subagent with web tools only", () => {
   assert.ok(prompt("web-researcher").includes("Cross-check every key claim across at least two independent sources"));
 });
 
-test("reviewer has no memory tools and cannot edit code", () => {
-  assert.equal(A["task-reviewer"].permission["openviking_*"], "deny");
+test("reviewer cannot edit code", () => {
   assert.equal(A["task-reviewer"].permission.edit["*"], "deny");
-});
-
-test("executors may only find and read in memory", () => {
-  for (const n of ["executor", "executor-strong"]) {
-    assert.equal(A[n].permission["openviking_*"], "deny", n);
-    assert.equal(A[n].permission.openviking_find, "allow", n);
-    assert.equal(A[n].permission.openviking_read, "allow", n);
-  }
 });
 
 test("prompts carry the key rules", () => {
@@ -87,22 +78,14 @@ test("prompts carry the key rules", () => {
   assert.ok(prompt("orchestrator").includes("change-brainstorm"));
 });
 
-const ORCH_GATES = "run ~/.config/opencode/bin/ov-sync <project> only at gates: an accepted document, an approved spec, an approved plan, an accepted wave and the archive";
-const ARCH_GATES = "run ~/.config/opencode/bin/ov-sync <project> only at gates: an accepted document or an accepted PoC result";
-const MEMORY = 'Memory: query="<query>" hits=<N> used=yes|no rederived=<ADR or map path|none>';
-const EXPLORER_MEMORY = '0. Memory: the line `Memory: query="<query>" hits=<N> used=yes|no rederived=none` for one find or search you ran on the question first; when openviking tools are unavailable, write hits=0 used=no rederived=none and the reason on the next line as `Memory error: <text>`.';
-
-test("orchestrator syncs only at gates and copies explorer Memory lines", () => {
+test("orchestrator prompt has a resume path that trusts the files", () => {
   const p = prompt("orchestrator");
-  assert.ok(p.includes(ORCH_GATES));
   assert.ok(!p.includes("edit files, then run"));
-  assert.ok(p.includes("copy the Memory line from each explorer report into decisions.md"));
   const at = p.indexOf("## Resume");
   assert.notEqual(at, -1, "orchestrator prompt has no ## Resume heading");
   const resume = p.slice(at);
   assert.ok(resume.includes("read the decisions.md it names"));
-  assert.ok(resume.includes("one find scoped to the change"));
-  assert.ok(resume.includes("when synced_commit differs from HEAD, trust the files"));
+  assert.ok(resume.includes("trust the files"));
 });
 
 test("resume restores the todo list right after change-state", () => {
@@ -125,18 +108,16 @@ test("resume restores the todo list right after change-state", () => {
   assert.ok(cmd.indexOf("change-todos") < cmd.indexOf("read the decisions.md it names"));
 });
 
-test("explorer output format starts with the Memory line", () => {
+test("explorer output format is answer first", () => {
   const p = prompt("explorer");
   const at = p.indexOf("Output format:\n");
   assert.notEqual(at, -1, "explorer prompt has no Output format: heading");
   const format = p.slice(at + "Output format:\n".length);
-  assert.ok(format.startsWith(EXPLORER_MEMORY + "\n1. Answer:"));
-  const item0 = format.split("\n")[0];
-  assert.ok(item0.includes("`Memory error: <text>`"));
-  assert.ok(item0.includes("on the next line"));
+  assert.ok(format.startsWith("1. Answer:"));
+  assert.ok(!format.includes("Memory"));
 });
 
-test("generated Claude agents carry the gate sync and Memory line wording", () => {
+test("generated Claude agents carry the local-tools wording", () => {
   // Uses the same generator as tests/test_claude_link.py, in memory, without writing ~/.claude.
   const script = [
     "import importlib.machinery, json, sys",
@@ -145,11 +126,9 @@ test("generated Claude agents carry the gate sync and Memory line wording", () =
     "print(json.dumps(L.plan_agents(Path(sys.argv[1]))))",
   ].join("\n");
   const agents = JSON.parse(execFileSync("python3", ["-c", script, ROOT], { encoding: "utf8" }));
-  assert.ok(agents.orchestrator.includes(ORCH_GATES));
-  assert.ok(agents.orchestrator.includes("copy the Memory line from each explorer report into decisions.md"));
-  assert.ok(agents.architect.includes(ARCH_GATES));
-  assert.ok(agents.architect.includes(MEMORY));
-  assert.ok(agents.explorer.includes(EXPLORER_MEMORY));
+  assert.ok(agents.orchestrator.includes("Edit spec, architecture and harness files only as files"));
+  assert.ok(agents.architect.includes("Commit the specs repository only through"));
+  assert.ok(!JSON.stringify(agents).includes("mcp__"));
 });
 
 test("ui-designer is a visible fast subagent locked to mockups and designer scripts", () => {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isScopedAgent, renderState, buildCompactionContext, summaryPayload, safeFacts, modelFromTier, openspecSummary, COMPACT_SHARE, sumTokens, compactionDecision, continueDecision, continueMessage, CONTINUE_TTL_MS, CONTINUE_COOLDOWN_MS, artifactPayload, artifactDecision, fingerprint, ARTIFACT_MIN_INTERVAL_MS } from "../lib/session-reset-core.mjs";
+import { isScopedAgent, renderState, buildCompactionContext, openspecSummary, COMPACT_SHARE, sumTokens, compactionDecision } from "../lib/session-reset-core.mjs";
 
 const state = { slug: "add-ping", tasks_open: ["1.2", "1.3"], awaiting_review: ["1.2"], current_wave: 2 };
 
@@ -12,7 +12,7 @@ test("only orchestrator and architect are scoped", () => {
 });
 
 test("executor compaction gets no context", () => {
-  assert.deepEqual(buildCompactionContext({ agent: "executor", state, facts: ["x"], tokenBudget: 500 }), []);
+  assert.deepEqual(buildCompactionContext({ agent: "executor", state }), []);
 });
 
 test("state names awaiting review and current wave", () => {
@@ -39,37 +39,17 @@ test("openspec status is shortened to completion and artifact states", () => {
   );
 });
 
-test("facts are cut to the token budget", () => {
-  const ctx = buildCompactionContext({ agent: "orchestrator", state, facts: ["a".repeat(10000)], tokenBudget: 100 });
-  assert.ok(ctx.join("").length <= renderState(state).length + 400 + 200);
-});
-
-test("only the summary is sent", () => {
-  assert.deepEqual(summaryPayload({ agent: "orchestrator", summary: "S" }), { kind: "session-summary", agent: "orchestrator", text: "S" });
-  assert.equal(summaryPayload({ agent: "executor", summary: "S" }), null);
-});
-
-test("openviking failure falls back to files", async () => {
-  const r = await safeFacts(() => Promise.reject(new Error("ECONNREFUSED")));
-  assert.deepEqual(r.facts, []);
-  assert.match(r.warning, /ECONNREFUSED/);
-  const ctx = buildCompactionContext({ agent: "orchestrator", state, facts: r.facts, tokenBudget: 500 });
+test("scoped compaction context carries state and the next directive", () => {
+  const ctx = buildCompactionContext({ agent: "orchestrator", state });
   assert.equal(ctx.length, 2);
+  assert.match(ctx[0], /Change: add-ping/);
   assert.match(ctx.at(-1), /'Next' section/);
 });
 
-test("missing state keeps facts only", () => {
-  const ctx = buildCompactionContext({ agent: "architect", state: null, facts: ["fact one"], tokenBudget: 500 });
-  assert.equal(ctx.length, 2);
-  assert.match(ctx[0], /fact one/);
+test("missing state keeps only the next directive", () => {
+  const ctx = buildCompactionContext({ agent: "architect", state: null });
+  assert.equal(ctx.length, 1);
   assert.match(ctx.at(-1), /'Next' section/);
-});
-
-test("tier file becomes provider and model ids", () => {
-  assert.deepEqual(modelFromTier("zai-coding-plan/glm-5.3-flash\n"), { providerID: "zai-coding-plan", modelID: "glm-5.3-flash" });
-  assert.deepEqual(modelFromTier("openrouter/vendor/model"), { providerID: "openrouter", modelID: "vendor/model" });
-  assert.equal(modelFromTier(""), null);
-  assert.equal(modelFromTier("no-slash"), null);
 });
 
 test("sumTokens adds all token fields and tolerates missing data", () => {
@@ -85,258 +65,107 @@ test("compactionDecision gates at 60% of the context window", () => {
   assert.deepEqual(compactionDecision(700000, 1000000), { compact: true });
 });
 
-test("phase_reset summarizes with the fast tier model", async () => {
-  const { readFileSync } = await import("node:fs");
-  const { SessionReset } = await import("../plugins/session-reset.mjs");
-  const tier = modelFromTier(readFileSync(new URL("../tiers/fast", import.meta.url), "utf8"));
-  let body;
-  const client = {
-    session: {
-      summarize: async (req) => { body = req.body; },
-      messages: async () => ({ data: [] }),
-    },
-    config: { providers: async () => ({ data: { providers: [] } }) },
-  };
-  const hooks = await SessionReset({ client, $: null });
-  await hooks.tool.phase_reset.execute({}, { agent: "orchestrator", sessionID: "s1" });
-  assert.deepEqual(body, tier);
-});
-
-const shareClient = (input) => {
-  const calls = [];
-  const client = {
-    session: {
-      summarize: async (req) => calls.push(req.body),
-      messages: async () => ({
-        data: [{ role: "assistant", providerID: "zai-coding-plan", modelID: "glm-5.3", tokens: { input, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }],
-      }),
-    },
-    config: {
-      providers: async () => ({ data: { providers: [{ id: "zai-coding-plan", models: { "glm-5.3": { limit: { context: 1000000, output: 131072 } } } }] } }),
-    },
-  };
-  return { client, calls };
-};
-
-test("phase_reset skips summarize below the compaction share", async () => {
-  const { SessionReset } = await import("../plugins/session-reset.mjs");
-  const { client, calls } = shareClient(400000);
-  const hooks = await SessionReset({ client, $: null });
-  const out = await hooks.tool.phase_reset.execute({}, { agent: "orchestrator", sessionID: "s1" });
-  assert.equal(out, "phase_reset skipped: 400000 tokens below 60% of 1000000");
-  assert.deepEqual(calls, []);
-});
-
-test("phase_reset schedules summarize at the compaction share", async () => {
-  const { readFileSync } = await import("node:fs");
-  const { SessionReset } = await import("../plugins/session-reset.mjs");
-  const tier = modelFromTier(readFileSync(new URL("../tiers/fast", import.meta.url), "utf8"));
-  const { client, calls } = shareClient(600000);
-  const hooks = await SessionReset({ client, $: null });
-  const out = await hooks.tool.phase_reset.execute({}, { agent: "orchestrator", sessionID: "s1" });
-  assert.match(out, /compaction scheduled/);
-  assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0], tier);
-});
-
-test("unreadable tokens or limit fail safe to compaction", async () => {
-  const { SessionReset } = await import("../plugins/session-reset.mjs");
-  const calls = [];
-  const client = {
-    session: {
-      summarize: async (req) => calls.push(req.body),
-      messages: async () => ({ data: [] }),
-    },
-    config: { providers: () => Promise.reject(new Error("offline")) },
-  };
-  const hooks = await SessionReset({ client, $: null });
-  const out = await hooks.tool.phase_reset.execute({}, { agent: "orchestrator", sessionID: "s1" });
-  assert.match(out, /compaction scheduled/);
-  assert.equal(calls.length, 1);
-});
-
-test("change-state failure is logged as a warning without stderr", async () => {
-  const { SessionReset } = await import("../plugins/session-reset.mjs");
-  const logs = [];
-  const client = {
-    app: { log: async (req) => logs.push(req.body) },
-    session: {
-      get: async () => ({ data: { title: "work [change:proj/add-ping]" } }),
-      messages: async () => ({ data: [] }),
-    },
-  };
-  const $ = () => ({
-    quiet: () => ({ text: async () => { throw Object.assign(new Error("secret=abc"), { exitCode: 2, stderr: "secret=abc" }); } }),
-  });
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = async () => { throw new Error("offline"); };
-  try {
-    const hooks = await SessionReset({ client, $ });
-    await hooks["chat.message"]({ agent: "orchestrator", sessionID: "s2" });
-    const output = { context: [] };
-    await hooks["experimental.session.compacting"]({ sessionID: "s2" }, output);
-    assert.equal(output.context.length, 1);
-    assert.match(output.context[0], /'Next' section/);
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-  assert.deepEqual(logs, [{ service: "session-reset", level: "warn", message: "change-state failed for proj/add-ping: exit 2" }]);
-});
-
 test("compaction state lists tasks to fix and to accept", () => {
   const text = renderState({ slug: "x", tasks_done: [], tasks_open: ["1.1", "1.2"], awaiting_review: [], needs_fix: ["1.1"], ready_to_accept: ["1.2"], current_wave: 1 });
   assert.ok(text.includes("Needs fix: 1.1"));
   assert.ok(text.includes("Ready to accept: 1.2"));
 });
 
-test("continueDecision honors ttl and cooldown", () => {
-  assert.equal(continueDecision({ markedAt: null, now: 1000 }).send, false);
-  assert.equal(continueDecision({ markedAt: 1000, now: 1000 + CONTINUE_TTL_MS, lastContinue: null }).send, true);
-  assert.equal(continueDecision({ markedAt: 1000, now: 1000 + CONTINUE_TTL_MS + 1, lastContinue: null }).send, false);
-  assert.equal(continueDecision({ markedAt: 1000, now: 2000, lastContinue: 1500 }).send, false);
-  assert.equal(continueDecision({ markedAt: 1000, now: 2000, lastContinue: 2000 - CONTINUE_COOLDOWN_MS }).send, true);
-});
-
-test("continueMessage names the change or stays generic", () => {
-  assert.match(continueMessage("p/add-ping"), /Continue change p\/add-ping now/);
-  assert.match(continueMessage("p/add-ping"), /change-state ~\/specs\/p add-ping/);
-  assert.match(continueMessage("p/add-ping"), /not a gate/);
-  assert.match(continueMessage(null), /Continue your current work from the files/);
-});
-
-test("an idle scoped session right after compaction is continued automatically", async () => {
-  const { SessionReset } = await import("../plugins/session-reset.mjs");
-  const sent = [];
-  const client = {
+// The plugin registers a compaction hook and the phase_reset tool through the V2
+// context. @opencode/plugin resolves only inside the OpenCode runtime, so tests
+// drive the setup callback with a fake ctx instead of importing the real SDK.
+const setupPlugin = async (overrides = {}) => {
+  const registered = { compaction: [] };
+  const tools = [];
+  const calls = { compacts: [], logs: [] };
+  const ctx = {
     session: {
-      get: async () => ({ data: { title: "t [change:p/x]" } }),
-      messages: async () => ({ data: [] }),
-      summarize: async () => {},
-      promptAsync: async (req) => {
-        sent.push(req);
-        return true;
+      hook: async (name, cb) => {
+        if (name === "compaction") registered.compaction.push(cb);
+      },
+      get: overrides.sessionGet ?? (async () => ({ title: "" })),
+      context: overrides.sessionContext ?? (async () => []),
+      compact: async (input) => {
+        calls.compacts.push(input);
       },
     },
-    config: { providers: async () => ({ data: { providers: [] } }) },
-  };
-  const hooks = await SessionReset({ client, $: null });
-  await hooks["chat.message"]({ agent: "orchestrator", sessionID: "s1" });
-  await hooks.event({ event: { type: "session.compacted", properties: { sessionID: "s1" } } });
-  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].path.id, "s1");
-  assert.equal(sent[0].body.agent, "orchestrator");
-  assert.match(sent[0].body.parts[0].text, /Continue change p\/x now/);
-  await hooks.event({ event: { type: "session.compacted", properties: { sessionID: "s1" } } });
-  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
-  assert.equal(sent.length, 1);
-});
-
-test("compaction of a non-scoped agent is never continued", async () => {
-  const { SessionReset } = await import("../plugins/session-reset.mjs");
-  const sent = [];
-  const client = {
-    session: {
-      get: async () => ({ data: { title: "t" } }),
-      messages: async () => ({ data: [] }),
-      summarize: async () => {},
-      promptAsync: async (req) => {
-        sent.push(req);
-        return true;
-      },
+    tool: {
+      transform: async (cb) =>
+        cb({
+          add: (t) => tools.push(t),
+        }),
     },
-    config: { providers: async () => ({ data: { providers: [] } }) },
+    model: { get: overrides.modelGet ?? (async () => null) },
+    app: { log: async (req) => calls.logs.push(req.body) },
   };
-  const hooks = await SessionReset({ client, $: null });
-  await hooks["chat.message"]({ agent: "executor", sessionID: "s2" });
-  await hooks.event({ event: { type: "session.compacted", properties: { sessionID: "s2" } } });
-  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s2" } } });
-  assert.equal(sent.length, 0);
+  const mod = await import("../plugins/session-reset/index.mjs");
+  await mod.default.setup(ctx);
+  return { registered, tools, calls };
+};
+
+test("plugin registers the compaction hook and the phase_reset tool", async () => {
+  const { registered, tools } = await setupPlugin();
+  assert.equal(registered.compaction.length, 1);
+  assert.equal(tools.length, 1);
+  assert.equal(tools[0].name, "phase_reset");
+  assert.equal(tools[0].input.type, "object");
 });
 
-test("artifactPayload keeps capped turns and rejects sessions without assistant text", () => {
-  const messages = [
-    { role: "user", parts: [{ type: "text", text: "fix the login bug" }] },
-    { role: "assistant", parts: [{ type: "text", text: "x".repeat(5000) }] },
-  ];
-  const p = artifactPayload({ agent: "build", title: "Login bug", messages });
-  assert.equal(p.kind, "session-artifact");
-  assert.match(p.text, /^# Login bug/);
-  assert.match(p.text, /- agent: build/);
-  assert.match(p.text, /## user\n\nfix the login bug/);
-  assert.ok(p.text.length < 3000);
-  assert.equal(artifactPayload({ agent: "build", title: "t", messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }), null);
+test("compaction hook skips non-scoped agents without touching the system", async () => {
+  const { registered } = await setupPlugin();
+  const event = { agent: "build", sessionID: "s2", system: [] };
+  await registered.compaction[0](event);
+  assert.deepEqual(event.system, []);
 });
 
-test("artifactDecision needs a change and honors the interval", () => {
-  assert.equal(artifactDecision({ now: 1000, lastWriteAt: null, changed: false }).write, false);
-  assert.equal(artifactDecision({ now: 1000, lastWriteAt: null, changed: true }).write, true);
-  assert.equal(artifactDecision({ now: 1000, lastWriteAt: 500, changed: true }).write, false);
-  assert.equal(artifactDecision({ now: 1000, lastWriteAt: 1000 - ARTIFACT_MIN_INTERVAL_MS, changed: true }).write, true);
+test("scoped compaction with an unavailable change state keeps the next directive and logs", async () => {
+  // proj/add-ping does not exist, so bin/change-state fails; the state part is
+  // dropped but the summarizer still gets the next-action directive.
+  const { registered, calls } = await setupPlugin({
+    sessionGet: async () => ({ title: "work [change:proj/add-ping]" }),
+  });
+  const event = { agent: "orchestrator", sessionID: "s1", system: [] };
+  await registered.compaction[0](event);
+  assert.equal(event.system.length, 1);
+  assert.match(event.system[0].text, /'Next' section/);
+  assert.equal(calls.logs.length, 1);
+  assert.equal(calls.logs[0].service, "session-reset");
+  assert.match(calls.logs[0].message, /change-state failed for proj\/add-ping: /);
+  assert.doesNotMatch(calls.logs[0].message, /secret/);
 });
 
-test("fingerprint detects content changes", () => {
-  assert.equal(fingerprint("abc"), fingerprint("abc"));
-  assert.notEqual(fingerprint("abc"), fingerprint("abd"));
+test("phase_reset is refused outside scoped sessions", async () => {
+  const { tools } = await setupPlugin();
+  const out = await tools[0].execute({}, { agent: "build", sessionID: "s1" });
+  assert.match(out.content, /only for orchestrator and architect/);
 });
 
-test("idle build session writes one vectors-only artifact", async () => {
-  const { SessionReset } = await import("../plugins/session-reset.mjs");
-  const writes = [];
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = async (url, init) => {
-    if (String(url).endsWith("/system/status")) return { ok: true, json: async () => ({ result: { user: "maxim" } }) };
-    writes.push({ url: String(url), body: JSON.parse(init.body) });
-    return { ok: true, json: async () => ({}) };
-  };
-  const client = {
-    session: {
-      get: async () => ({ data: { title: "T" } }),
-      messages: async () => ({ data: [{ role: "user", parts: [{ type: "text", text: "do work" }] }, { role: "assistant", parts: [{ type: "text", text: "done" }] }] }),
-      summarize: async () => {},
-      promptAsync: async () => true,
+test("phase_reset skips compaction below the share and schedules at or above it", async () => {
+  const message = (tokens) => ({
+    sessionContext: async () => [
+      { info: { role: "assistant", providerID: "p", modelID: "m", tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } } },
+    ],
+    modelGet: async () => ({ limit: { context: 1000000 } }),
+  });
+  const skipped = await setupPlugin(message(400000));
+  const out = await skipped.tools[0].execute({}, { agent: "orchestrator", sessionID: "s1" });
+  assert.equal(out.content, "phase_reset skipped: 400000 tokens below 60% of 1000000");
+  assert.deepEqual(skipped.calls.compacts, []);
+
+  const scheduled = await setupPlugin(message(600000));
+  const out2 = await scheduled.tools[0].execute({}, { agent: "architect", sessionID: "s2" });
+  assert.match(out2.content, /compaction scheduled/);
+  assert.deepEqual(scheduled.calls.compacts, [{ sessionID: "s2" }]);
+});
+
+test("phase_reset fails safe to compaction when the model limit is unreadable", async () => {
+  const { tools, calls } = await setupPlugin({
+    sessionContext: async () => [],
+    modelGet: async () => {
+      throw new Error("offline");
     },
-    config: { providers: async () => ({ data: { providers: [] } }) },
-  };
-  try {
-    const hooks = await SessionReset({ client, $: null });
-    await hooks["chat.message"]({ agent: "build", sessionID: "s9" });
-    await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s9" } } });
-    await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s9" } } });
-    assert.equal(writes.length, 1);
-    assert.equal(writes[0].body.uri, "viking://user/maxim/memories/sessions/s9.md");
-    assert.equal(writes[0].body.mode, "replace");
-    assert.equal(writes[0].body.processing_mode, "vectors_only");
-    assert.match(writes[0].body.content, /## assistant\n\ndone/);
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-});
-
-test("idle scoped sessions write no artifact", async () => {
-  const { SessionReset } = await import("../plugins/session-reset.mjs");
-  const writes = [];
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = async (url, init) => {
-    if (String(url).endsWith("/system/status")) return { ok: true, json: async () => ({ result: { user: "maxim" } }) };
-    writes.push(JSON.parse(init.body));
-    return { ok: true, json: async () => ({}) };
-  };
-  const client = {
-    session: {
-      get: async () => ({ data: { title: "T" } }),
-      messages: async () => ({ data: [{ role: "assistant", parts: [{ type: "text", text: "x" }] }] }),
-      summarize: async () => {},
-      promptAsync: async () => true,
-    },
-    config: { providers: async () => ({ data: { providers: [] } }) },
-  };
-  try {
-    const hooks = await SessionReset({ client, $: null });
-    await hooks["chat.message"]({ agent: "orchestrator", sessionID: "s10" });
-    await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s10" } } });
-    assert.equal(writes.length, 0);
-  } finally {
-    globalThis.fetch = realFetch;
-  }
+  });
+  const out = await tools[0].execute({}, { agent: "orchestrator", sessionID: "s3" });
+  assert.match(out.content, /compaction scheduled/);
+  assert.deepEqual(calls.compacts, [{ sessionID: "s3" }]);
 });

@@ -2,7 +2,7 @@
 
 # Research the live web with citations
 
-Use when the question needs information beyond the repository and memory: finding or comparing tools, libraries and APIs, checking versions, licenses and deprecations, or verifying how others solved a problem. Triggers on "research", "find a tool", "what's the best <lib>", "check the latest version".
+Use when the question needs information beyond the repository: finding or comparing tools, libraries and APIs, checking versions, licenses and deprecations, or verifying how others solved a problem. Triggers on "research", "find a tool", "what's the best <lib>", "check the latest version".
 
 ## Method
 
@@ -24,4 +24,4 @@ Answer first. Then findings as one line per claim: `claim — <URL> (date or ver
 
 ## Keeping findings
 
-When the research settles a recurring reference (a tool choice, a version constraint, a link worth re-reading), save it with openviking_remember as one line: the decision, the source URL and the date.
+When the research settles a recurring reference (a tool choice, a version constraint, a link worth re-reading), name it in the findings so the caller can record it in the project's decisions.

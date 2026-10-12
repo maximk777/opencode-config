@@ -18,7 +18,7 @@ _MARKERS = [
 class PublicFiles(unittest.TestCase):
     def test_readme_exists_and_names_commands(self):
         readme = (REPO / "README.md").read_text()
-        for needle in ["bin/claude-link", "bin/ov-up", "bin/check-public", "node --test", "python3 -m unittest"]:
+        for needle in ["bin/claude-link", "bin/check-public", "node --test", "python3 -m unittest"]:
             self.assertIn(needle, readme)
 
     def test_license_is_mit_for_public_identity(self):

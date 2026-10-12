@@ -104,9 +104,7 @@
           "export -p": "deny",
           "*.env": "deny",
           "*.env *": "deny"
-        },
-        "openviking_find": "allow",
-        "openviking_search": "allow"
+        }
       }
     },
     "web-researcher": {
@@ -150,9 +148,7 @@
           "*.env *": "deny"
         },
         "webfetch": "allow",
-        "websearch": "allow",
-        "openviking_find": "allow",
-        "openviking_search": "allow"
+        "websearch": "allow"
       }
     },
     "ui-designer": {
@@ -231,9 +227,6 @@
           "git push*": "deny",
           "git * push*": "deny"
         },
-        "openviking_*": "deny",
-        "openviking_find": "allow",
-        "openviking_read": "allow",
         "todowrite": "deny"
       }
     },
@@ -259,9 +252,6 @@
           "git push*": "deny",
           "git * push*": "deny"
         },
-        "openviking_*": "deny",
-        "openviking_find": "allow",
-        "openviking_read": "allow",
         "todowrite": "deny"
       }
     },
@@ -278,7 +268,6 @@
           "../*specs/*/reports/*": "allow"
         },
         "task": "deny",
-        "openviking_*": "deny",
         "bash": {
           "*": "deny",
           "git diff*": "allow",
@@ -459,19 +448,8 @@
       }
     }
   },
-  "mcp": {
-    "openviking": {
-      "type": "remote",
-      "url": "http://127.0.0.1:1933/mcp",
-      "headers": {
-        "Authorization": "Bearer {file:~/.openviking/mcp-key}"
-      },
-      "enabled": true,
-      "oauth": false
-    }
-  },
   "lsp": true,
-  "plugin": [
-    "./plugins/session-reset.mjs"
+  "plugins": [
+    "./plugins/session-reset"
   ]
 }

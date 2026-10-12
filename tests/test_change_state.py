@@ -50,7 +50,7 @@ class ChangeState(unittest.TestCase):
         for n, text in reports.items():
             (ch / "reports" / f"{n}.md").write_text(text)
         (ch / "waves.md").write_text("wave 1: 1.1\nwave 2: " + " ".join(open_tasks) + "\n")
-        cls.state = S.read_state(cls.root, "add-ping", home=cls.home)
+        cls.state = S.read_state(cls.root, "add-ping")
 
     def test_done_and_open(self):
         self.assertEqual(self.state["tasks_done"], ["1.1"])
@@ -70,7 +70,7 @@ class ChangeState(unittest.TestCase):
         self.assertEqual(self.state["openspec_status"]["changeName"], "add-ping")
 
 
-class MemoryFields(unittest.TestCase):
+class FileFields(unittest.TestCase):
     def _fixture(self, git=False, decisions=False):
         tmp_root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp_root, True)
@@ -82,62 +82,43 @@ class MemoryFields(unittest.TestCase):
         ch.mkdir(parents=True)
         if decisions:
             (ch / "decisions.md").write_text("# Decisions\n")
-        home = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, home, True)
-        return root, home
+        return root
 
-    def test_decisions_and_synced_commit_present(self):
-        root, home = self._fixture(git=True, decisions=True)
-        state_dir = home / ".openviking" / "sync-state"
-        state_dir.mkdir(parents=True)
-        (state_dir / f"{root.resolve().name}.json").write_text(json.dumps({"synced_commit": "abc123"}))
-        state = S.read_state(root, "add-ping", run_openspec=False, home=home)
+    def test_decisions_present(self):
+        root = self._fixture(git=True, decisions=True)
+        state = S.read_state(root, "add-ping", run_openspec=False)
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True).stdout.strip()
         self.assertEqual(state["decisions"], str((root / "openspec" / "changes" / "add-ping" / "decisions.md").resolve()))
-        self.assertEqual(state["synced_commit"], "abc123")
         self.assertEqual(state["head"], head)
 
     def test_head_none_without_git_repository(self):
-        root, home = self._fixture(git=False, decisions=True)
+        root = self._fixture(git=False, decisions=True)
         # GIT_CEILING_DIRECTORIES stops git from finding a repository above root,
         # so the result is independent of where the OS places temp directories.
         with patch.dict(os.environ, {"GIT_CEILING_DIRECTORIES": str(root.parent)}):
-            state = S.read_state(root, "add-ping", run_openspec=False, home=home)
+            state = S.read_state(root, "add-ping", run_openspec=False)
         self.assertIsNone(state["head"])
 
-    def test_missing_decisions_and_state_file(self):
-        root, home = self._fixture(git=False, decisions=False)
-        state = S.read_state(root, "add-ping", run_openspec=False, home=home)
+    def test_missing_decisions(self):
+        root = self._fixture(git=False, decisions=False)
+        state = S.read_state(root, "add-ping", run_openspec=False)
         self.assertIsNone(state["decisions"])
-        self.assertIsNone(state["synced_commit"])
-
-    def test_invalid_json_state_file(self):
-        root, home = self._fixture(git=False, decisions=False)
-        state_dir = home / ".openviking" / "sync-state"
-        state_dir.mkdir(parents=True)
-        (state_dir / f"{root.resolve().name}.json").write_text("not json")
-        state = S.read_state(root, "add-ping", run_openspec=False, home=home)
-        self.assertIsNone(state["synced_commit"])
 
     def test_decisions_is_absolute_for_relative_root(self):
-        root, home = self._fixture(git=False, decisions=True)
+        root = self._fixture(git=False, decisions=True)
         cwd = Path.cwd()
         self.addCleanup(os.chdir, cwd)
         os.chdir(root.parent)
-        state = S.read_state(Path(root.name), "add-ping", run_openspec=False, home=home)
+        state = S.read_state(Path(root.name), "add-ping", run_openspec=False)
         self.assertTrue(Path(state["decisions"]).is_absolute())
         self.assertEqual(state["decisions"], str((root / "openspec" / "changes" / "add-ping" / "decisions.md").resolve()))
 
 
 class ResumeCommand(unittest.TestCase):
-    def test_text_names_scoped_find_and_trust_rule(self):
+    def test_text_names_decisions_and_trust_rule(self):
         text = Path("commands/resume.md").read_text()
         self.assertIn("read the decisions.md it names", text)
-        self.assertIn(
-            "run one find with target_uri viking://resources/<project>/specs/openspec/changes/$ARGUMENTS before any other memory call",
-            text,
-        )
-        self.assertIn("when synced_commit differs from head, trust the files", text)
+        self.assertIn("trust the files", text)
 
 
 if __name__ == "__main__":

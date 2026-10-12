@@ -11,8 +11,7 @@ checkSkill("change-plan", [
   "Tasks in one wave never share a file or a Go package.",
   "Stop and ask the user to approve the plan before execution.",
   "After approval, commit the specs repository with",
-  "run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once",
-  "After the plan commit and ov-sync, run ~/.config/opencode/bin/change-todos ~/specs/<project> <slug> and pass its output unchanged to todowrite when that tool is available; skip the step otherwise.",
+  "After the plan commit, run ~/.config/opencode/bin/change-todos ~/specs/<project> <slug> and pass its output unchanged to todowrite when that tool is available; skip the step otherwise.",
   "When change-todos exits non-zero or todowrite returns an error, skip the step without reporting it and continue.",
 ]);
 

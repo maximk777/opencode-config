@@ -98,9 +98,9 @@ test("primary agents run writing and project commands without asking", () => {
 
 test("secrets stay out of bash output", () => {
   for (const a of [...PRIMARY, "executor", "executor-strong", "task-reviewer", "explorer"]) {
-    expectAll(a, "bash", "deny", ["env", "printenv", "printenv DEEPSEEK_API_KEY", "cat ~/.openviking/.env", "cat .env"]);
+    expectAll(a, "bash", "deny", ["env", "printenv", "printenv DEEPSEEK_API_KEY", "cat .env"]);
   }
-  expectAll("orchestrator", "read", "deny", [`${HOME}/.openviking/.env`, "/w/.env.local"]);
+  expectAll("orchestrator", "read", "deny", ["/w/.env.local"]);
   expectAll("orchestrator", "read", "allow", ["/w/.env.example", "/w/main.go"]);
 });
 
@@ -121,7 +121,6 @@ test("flow scripts run without asking", () => {
     "~/.config/opencode/bin/change-todos ~/specs/p x 2>&1",
     "~/.config/opencode/bin/change-todos ~/specs/p x 2>/dev/null",
     "~/.config/opencode/bin/check-commit-msg",
-    "~/.config/opencode/bin/ov-sync p",
     "~/.config/opencode/bin/specs-commit p 'docs(x): add plan'",
     "~/.config/opencode/bin/specs-commit p 'docs(x): y' > ../w/a.go",
     "git add -- internal/a.go",
@@ -129,7 +128,6 @@ test("flow scripts run without asking", () => {
   for (const a of ["architect", "harness-builder"]) {
     expectAll(a, "bash", "allow", ["~/.config/opencode/bin/specs-commit p 'docs(x): add adr'"]);
   }
-  expectAll("setup-improver", "bash", "allow", ["~/.config/opencode/bin/ov-usage --days 7"]);
 });
 
 test("only the orchestrator keeps the todo list", () => {
@@ -137,11 +135,6 @@ test("only the orchestrator keeps the todo list", () => {
   for (const a of ["executor", "executor-strong", "task-reviewer"]) {
     expectAll(a, "todowrite", "deny", ["*"]);
   }
-});
-
-test("explorer may find and search in memory", () => {
-  expectAll("explorer", "openviking_find", "allow", ["*"]);
-  expectAll("explorer", "openviking_search", "allow", ["*"]);
 });
 
 test("edits stay in the specs tree outside the work repository", () => {
@@ -173,11 +166,9 @@ test("architect runs proofs of concept in Go, Python, Node, Rust and Zig", () =>
   ]);
 });
 
-test("default model and memory server do not depend on the shell environment", () => {
+test("default model does not depend on the shell environment", () => {
   assert.equal(cfg.model, "{file:./tiers/fast}");
   assert.equal(cfg.small_model, "{file:./tiers/fast}");
-  assert.equal(cfg.mcp.openviking.oauth, false);
-  assert.match(cfg.mcp.openviking.headers.Authorization, /^Bearer \{file:~\/\.openviking\/[a-z-]+\}$/);
 });
 
 test("reviewer and explorer run no writing commands", () => {

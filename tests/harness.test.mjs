@@ -17,7 +17,7 @@ checkSkill("harness-assessment", [
   "Hand agent-facing rules about gates to the instrumentation agent.",
   "Reassess after several archived changes and mark gates that caught nothing as removal candidates.",
   "## Profile matrix",
-  "After the user accepts the assessment, commit the specs repository and run ~/.config/opencode/bin/ov-sync <project>; it only queues the project and returns at once.",
+  "After the user accepts the assessment, commit the specs repository.",
 ]);
 
 test("gates template header is exact", () => {

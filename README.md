@@ -12,15 +12,13 @@ An [OpenCode](https://opencode.ai) configuration: a change-flow orchestrator, sk
 
 ## Installation
 
-Bootstrap a fresh macOS laptop in one command — installs missing deps (Homebrew, node, python, opencode; plus Docker Desktop and Ollama when memory is on), optionally creates a private OpenViking with its own keys, asks for the account name and provider tokens, installs the launch agents:
+Bootstrap a fresh macOS laptop in one command — installs missing deps (Homebrew, node, python, opencode), asks for the provider tokens, and links the setup into Claude Code:
 
 ```sh
 bin/bootstrap
 ```
 
-Memory is optional: `bin/bootstrap --no-memory` (or `OV_MEMORY=no`) skips OpenViking entirely — no Docker Desktop, no Ollama, no launch agents, opencode just runs without memory. It also removes the `mcp.openviking` entry from `opencode.json` (a local git modification) and skips the Claude Code MCP registration, so nothing looks for OpenViking at startup; a rerun with memory restores the entry. On a fresh machine an interactive run also asks. A later plain rerun of `bin/bootstrap` adds the memory stack on top; `--no-memory` on a machine where memory was installed before acts as a repair — it unloads and deletes the `opencode.ov-studio`/`opencode.ov-syncd` launch agents and unregisters the Claude Code MCP, while the `~/.openviking` data is kept.
-
-The OpenViking LLM token (DeepSeek) is optional: an empty answer runs OpenViking in lite mode — local embeddings only, no external LLM calls, no memory extraction and no nightly semantic summaries. Find, spec sync and writes keep working. A later key added to `~/.openviking/.env` plus a rerun of `bin/ov-up` restores full mode.
+OpenViking memory was retired (setup change of 2026-10-12): semantic search is git + rg over `~/specs`. A rerun of `bin/bootstrap` unloads any launch agents and MCP registrations a memory install left behind; the data in `~/.openviking` is kept until removed by hand.
 
 The pieces it runs, also usable on their own:
 
@@ -28,12 +26,6 @@ Link the skills, agents and rules into [Claude Code](https://claude.com/claude-c
 
 ```sh
 bin/claude-link
-```
-
-Install the launch agents that keep background syncs running:
-
-```sh
-bin/ov-up
 ```
 
 ## Running the tests
