@@ -451,5 +451,18 @@
   "lsp": true,
   "plugins": [
     "./plugins/session-reset"
-  ]
+  ],
+  "mcp": {
+    "servers": {"engram":{"command":["/opt/homebrew/bin/engram","mcp","--tools=agent"],"enabled":true,"type":"local"},
+      "chrome-devtools": {
+        "type": "local",
+        "command": [
+          "npx",
+          "-y",
+          "chrome-devtools-mcp@latest",
+          "--autoConnect"
+        ]
+      }
+    }
+  }
 }
